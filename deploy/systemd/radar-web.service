@@ -1,0 +1,59 @@
+# Radar de Titulares - panel web (FastAPI/uvicorn, un solo worker, solo localhost).
+[Unit]
+Description=Radar de Titulares (panel web)
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=radar
+Group=radar
+WorkingDirectory=/opt/radar/current
+# Valores por defecto; /etc/radar/radar.env los reemplaza.
+Environment=RADAR_HOST=127.0.0.1
+Environment=RADAR_PORT=8000
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/radar/radar.env
+ExecStart=/opt/radar/current/.venv/bin/uvicorn radar.web.app:create_app --factory \
+    --host ${RADAR_HOST} --port ${RADAR_PORT} --workers 1 \
+    --proxy-headers --forwarded-allow-ips 127.0.0.1 --no-server-header --no-access-log
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+# Recursos
+MemoryHigh=250M
+MemoryMax=350M
+CPUQuota=60%
+TasksMax=64
+
+# Logs en un espacio propio de journald (retención en /etc/systemd/journald@radar.conf)
+LogNamespace=radar
+
+# Hardening: solo /var/lib/radar es escribible
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/radar
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

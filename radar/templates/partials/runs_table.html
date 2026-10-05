@@ -1,0 +1,31 @@
+{% set run_labels = {'ok': 'OK', 'not_modified': 'Sin cambios', 'error': 'Error', 'running': 'En curso', 'skipped': 'Omitida', 'blocked': 'Bloqueada', 'empty': 'Sin notas reconocibles'} %}
+{% if runs %}
+<table class="table responsive">
+  <thead><tr><th>Inicio</th><th>Fuente</th><th>Estado</th><th>Ítems</th><th>Nuevos</th><th>Cambios</th><th>Intentos</th><th>Duración</th></tr></thead>
+  <tbody>
+  {% for r in runs %}
+    <tr>
+      <td data-label="Inicio" class="nowrap small">{{ r.started_at | local_dt('%d/%m %H:%M:%S') }}</td>
+      <td data-label="Fuente">
+        {% if r.subsource %}{{ r.subsource.media.name }} · {{ r.subsource.name }}
+        {% elif r.run_type == 'pagina' and r.media %}{{ r.media.name }} · lectura de páginas
+        {% elif r.run_type == 'analisis' %}Análisis de relaciones
+        {% else %}—{% endif %}
+      </td>
+      <td data-label="Estado">
+        <span class="badge badge-{{ r.status }}">{{ run_labels.get(r.status, r.status) }}</span>
+        {% if r.http_status %}<span class="muted small">HTTP {{ r.http_status }}</span>{% endif %}
+        {% if r.error %}<div class="small error-text clamp" title="{{ r.error }}">{{ r.error }}</div>{% endif %}
+      </td>
+      <td data-label="Ítems" class="num">{{ r.items_found }}</td>
+      <td data-label="Nuevos" class="num">{{ r.items_new }}</td>
+      <td data-label="Cambios" class="num">{{ r.items_updated }}{% if r.items_skipped %} <span class="muted small">({{ r.items_skipped }} desc.)</span>{% endif %}</td>
+      <td data-label="Intentos" class="num">{{ r.attempts or '—' }}</td>
+      <td data-label="Duración" class="num small">{{ (r.duration_ms / 1000) | round(1) if r.duration_ms is not none else '—' }} s</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">Sin ejecuciones registradas.</p>
+{% endif %}

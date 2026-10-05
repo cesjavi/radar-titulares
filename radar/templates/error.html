@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · Radar de Titulares{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>{{ status }} · {{ title }}</h1>
+  {% if detail %}<p>{{ detail }}</p>{% endif %}
+  <p><a href="/">Volver al resumen</a></p>
+</section>
+{% endblock %}

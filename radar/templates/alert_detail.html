@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Alerta #{{ alert.id }} · Radar de Titulares{% endblock %}
+{% block content %}
+<p><a href="/alertas">← Alertas</a>{% if alert.group_id %} · <a href="/grupos/{{ alert.group_id }}">Grupo y comparación</a>{% endif %}</p>
+<section class="card">
+  <div class="card-head">
+    <h1 class="headline-lg">{{ alert.title }}</h1>
+    <span class="badge prio-{{ alert.priority }}">Prioridad {{ alert.priority }}</span>
+  </div>
+  <p class="small muted">La prioridad indica qué revisar primero. No significa falsedad ni coordinación.</p>
+  {% for w in evidence.advertencias or [] %}<p class="alert alert-warn">{{ w }}</p>{% endfor %}
+  <dl class="meta compact-meta">
+    <dt>Estado</dt><dd><span class="badge status-{{ alert.status }}">{{ alert.status }}</span>{% if alert.review_note and not public_view %} · {{ alert.review_note }}{% endif %}</dd>
+    <dt>Qué coincide</dt><dd>{{ evidence.que_coincide | join('; ') }}</dd>
+    <dt>Medios independientes</dt><dd>{{ alert.independent_media_count }}: {{ evidence.medios_independientes | join(', ') }}{% if alert.media_count > alert.independent_media_count %} <span class="small muted">(además hay republicaciones)</span>{% endif %}</dd>
+    <dt>Primera detección (radar)</dt><dd>{{ evidence.primera_deteccion.medio }} · {{ evidence.primera_deteccion.cuando }} <div class="small muted">Depende de cuándo se consultó cada fuente.</div></dd>
+    <dt>Primera publicación (según fuente)</dt><dd>{% if evidence.primera_publicacion.medio %}{{ evidence.primera_publicacion.medio }} · {{ evidence.primera_publicacion.cuando }}{% else %}no determinable{% endif %} <div class="small muted">{{ evidence.primera_publicacion.nota }}</div></dd>
+    <dt>Versión</dt><dd>{{ alert.version }} · creada {{ alert.created_at | local_dt }}{% if alert.last_material_change_at %} · último cambio relevante {{ alert.last_material_change_at | local_dt }}{% endif %}</dd>
+  </dl>
+</section>
+
+<section class="card">
+  <h2>Titulares y medios</h2>
+  <table class="table responsive">
+    <thead><tr><th>Medio</th><th>Titular</th><th>Publicada</th><th>Detectada</th></tr></thead>
+    <tbody>
+    {% for x in evidence.articulos %}
+      <tr>
+        <td data-label="Medio">{{ x.medio }}{% if x.autor %}<div class="small">Por {{ x.autor }}</div>{% endif %}{% if x.subfuente %}<div class="small muted">{{ x.subfuente }}</div>{% endif %}{% if x.republicada %} <span class="badge badge-syndicated">republicada</span>{% endif %}</td>
+        <td data-label="Titular"><a href="/noticias/{{ x.id }}">{{ x.titular }}</a>
+          {% set art = arts.get(x.id) %}{% if art and not art.is_demo and (art.url.startswith('https://') or art.url.startswith('http://')) %} <a class="small" href="{{ art.url }}" target="_blank" rel="noopener noreferrer nofollow">original ↗</a>{% endif %}</td>
+        <td data-label="Publicada" class="small">{{ x.publicada.valor or 'sin dato' }}<div class="muted">{{ x.publicada.precision }}</div></td>
+        <td data-label="Detectada" class="small nowrap">{{ x.detectada }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Evidencia</h2>
+  {% if evidence.frases %}<p><strong>Frases coincidentes:</strong> {% for f in evidence.frases %}<mark>{{ f }}</mark>{% if not loop.last %} · {% endif %}{% endfor %}</p>{% endif %}
+  {% if evidence.terminos %}<p><strong>Términos comunes:</strong> {{ evidence.terminos | join(', ') }}</p>{% endif %}
+  <table class="table responsive">
+    <thead><tr><th>Relación</th><th>Puntaje léxico</th><th>Reglas</th><th>Revisión</th></tr></thead>
+    <tbody>
+    {% for r in evidence.relaciones %}
+      <tr>
+        <td data-label="Relación"><a href="/relaciones/{{ r.id }}">{{ r.tipo_texto }}</a></td>
+        <td data-label="Puntaje" class="num">{{ '%.2f' | format(r.puntaje or 0) }}</td>
+        <td data-label="Reglas" class="small">{{ r.reglas | join(', ') }}</td>
+        <td data-label="Revisión"><span class="badge review-{{ r.revision }}">{{ r.revision }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if sources %}
+  <h3>Posible fuente común</h3>
+  <ul>{% for s in sources %}<li><strong>{{ s.tipo }}</strong> · indicios: {{ s.indicios | join(', ') }} · en {{ s.articulos | length }} nota(s)</li>{% endfor %}</ul>
+  <p class="small muted">Indicio textual para revisar (informe, conferencia, agencia o entrevista): si existe una fuente común, la coincidencia puede explicarse por ella.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Limitaciones</h2>
+  <ul class="small">{% for l in limitations %}<li>{{ l }}</li>{% endfor %}</ul>
+</section>
+
+{% if user and user.is_admin %}
+<section class="card">
+  <h2>Revisión</h2>
+  <form method="post" action="/alertas/{{ alert.id }}/estado" class="stack narrow">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Nota <input name="note" maxlength="2000" value="{{ alert.review_note or '' }}"></label>
+    <div class="row-buttons">
+      {% for s in statuses %}{% if s != alert.status %}<button type="submit" name="status" value="{{ s }}" class="btn {{ '' if s == 'revisada' else 'btn-ghost' }}">Marcar {{ s }}</button>{% endif %}{% endfor %}
+    </div>
+  </form>
+  <p class="small muted">Una alerta revisada vuelve a «pendiente» si llega evidencia nueva relevante (otro medio, mayor prioridad, frases nuevas). Las descartadas y silenciadas no se reabren solas.</p>
+</section>
+{% endif %}
+
+{% if not public_view %}
+<section class="card">
+  <h2>Historial</h2>
+  <ul class="small">
+  {% for e, d in events %}
+    <li>{{ e.created_at | local_dt }} · <strong>{{ e.event }}</strong>
+      {% if e.event == 'estado' %}: {{ d.de }} → {{ d.a }}{% if d.nota %} ({{ d.nota }}){% endif %}
+      {% elif e.event == 'actualizada' %}: {% for k, v in (d.cambios or {}).items() %}{{ k | replace('_', ' ') }}: {{ v if v is string else v | join(', ') }}{% if not loop.last %}; {% endif %}{% endfor %}{% if d.reabierta %} · reabierta{% endif %}
+      {% elif e.event == 'notificacion' %}: {{ d.canal }} {{ d.estado }} (intento {{ d.intento }}){% if d.error %} · {{ d.error }}{% endif %}
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+{% endif %}
+{% endblock %}

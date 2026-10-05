@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Grupos · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Grupos de coincidencias</h1>
+<p class="muted small">Notas de distintos medios unidas por coincidencias <strong>léxicas</strong> (titulares, expresiones, entidades). Un grupo no prueba coordinación ni indica qué medio originó la información. «Medios independientes» no cuenta republicaciones de agencias o terceros; Canal E y Revista Noticias cuentan como Perfil.</p>
+<p class="muted small">{{ total }} grupo{{ 's' if total != 1 }} · página {{ page }} de {{ pages }}</p>
+{% if rows %}
+<table class="table responsive">
+  <thead><tr><th>Grupo</th><th>Notas</th><th>Medios</th><th>Independientes</th><th>Primera aparición observada</th></tr></thead>
+  <tbody>
+  {% for g, common in rows %}
+    <tr>
+      <td data-label="Grupo"><a class="headline" href="/grupos/{{ g.id }}">{{ g.title }}</a>
+        {% if g.locked %}<span class="badge badge-skipped" title="Tiene correcciones manuales">corregido</span>{% endif %}
+        {% if common.frases %}<div class="small muted">Expresiones: {{ common.frases[:3] | join(' · ') }}</div>
+        {% elif common.terminos %}<div class="small muted">Términos: {{ common.terminos[:6] | join(', ') }}</div>{% endif %}
+      </td>
+      <td data-label="Notas" class="num">{{ g.article_count }}</td>
+      <td data-label="Medios" class="num">{{ g.media_count }}</td>
+      <td data-label="Independientes" class="num">{{ g.independent_media_count }}</td>
+      <td data-label="Primera aparición" class="small nowrap">{{ g.first_seen_at | local_dt }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if pages > 1 %}
+<nav class="pager">
+  {% if page > 1 %}<a class="btn btn-ghost" href="/grupos?page={{ page - 1 }}">← Anterior</a>{% endif %}
+  <span class="muted">{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a class="btn btn-ghost" href="/grupos?page={{ page + 1 }}">Siguiente →</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<p class="muted">Todavía no hay grupos. Se generan con <code>python -m radar analyze</code> (también corre al final de cada recolección).</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,6 @@
+# Los scripts de shell, las unidades de systemd y la configuración de Nginx deben tener finales
+# de línea LF aunque se versionen desde Windows (con CRLF, bash falla: "unexpected token $'do\r'").
+deploy/** text eol=lf
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf

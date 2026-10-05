@@ -1,0 +1,49 @@
+# Radar de Titulares - ciclo de recolección y procesamiento:
+# feeds → páginas → relaciones → IA (si está activada) → alertas → avisos.
+# Type=oneshot + timer: systemd no inicia otro ciclo mientras éste corre; además la app
+# toma un bloqueo de archivo (/var/lib/radar/collect.lock) contra ejecuciones manuales.
+[Unit]
+Description=Radar de Titulares (recolección y procesamiento)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=radar
+Group=radar
+WorkingDirectory=/opt/radar/current
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/etc/radar/radar.env
+ExecStart=/opt/radar/current/.venv/bin/python -m radar collect
+# Debe terminar antes del próximo disparo (10 min).
+TimeoutStartSec=9min
+Nice=10
+IOSchedulingClass=idle
+MemoryHigh=300M
+MemoryMax=450M
+CPUQuota=80%
+TasksMax=64
+LogNamespace=radar
+
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/radar
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=

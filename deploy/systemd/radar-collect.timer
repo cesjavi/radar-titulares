@@ -1,0 +1,12 @@
+[Unit]
+Description=Radar de Titulares: recolección cada 10 minutos
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+AccuracySec=30s
+RandomizedDelaySec=20
+Persistent=true
+
+[Install]
+WantedBy=timers.target

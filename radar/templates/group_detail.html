@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Grupo #{{ g.id }} · Radar de Titulares{% endblock %}
+{% block content %}
+<p><a href="/grupos">← Grupos</a></p>
+{% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
+<section class="card">
+  <div class="card-head">
+    <h1 class="headline-lg">{{ g.title }}</h1>
+    {% if g.locked %}<span class="badge badge-skipped">con correcciones manuales</span>{% endif %}
+  </div>
+  <dl class="meta compact-meta">
+    <dt>Notas</dt><dd>{{ active | length }}</dd>
+    <dt>Medios</dt><dd>{{ media_names | join(', ') }}</dd>
+    <dt>Medios independientes</dt><dd>{{ independent | length }}{% if independent | length < media_names | length %} <span class="small muted">(hay notas republicadas de agencias o terceros)</span>{% endif %}</dd>
+    <dt>Primera aparición observada</dt><dd>{{ g.first_seen_at | local_dt }} <span class="small muted">(detección del radar; no indica qué medio publicó primero)</span></dd>
+    {% if common.frases %}<dt>Expresiones comunes</dt><dd>{% for f in common.frases %}<mark>{{ f }}</mark>{% if not loop.last %} · {% endif %}{% endfor %}</dd>{% endif %}
+    {% if common.terminos %}<dt>Términos comunes</dt><dd>{{ common.terminos | join(', ') }}</dd>{% endif %}
+  </dl>
+</section>
+
+<section class="card">
+  <h2>Por qué se agrupó</h2>
+  {% if explanation.criterio %}<p>{{ explanation.criterio }}</p>{% endif %}
+  {% if explanation.coherencia %}<p class="small">Coherencia interna (similitud de palabras entre todos los pares): mínima {{ explanation.coherencia.min }}, media {{ explanation.coherencia.media }}.</p>{% endif %}
+  {% if explanation.version %}<p class="small muted">Algoritmo {{ explanation.version }}.</p>{% endif %}
+  <ul class="small">{% for w in explanation.advertencias or [] %}<li>{{ w }}</li>{% endfor %}</ul>
+</section>
+
+<section class="card">
+  <h2>Cronología</h2>
+  <p class="small muted">Ordenada por la hora de publicación declarada por cada medio. Las notas sin hora se listan aparte: no se les asigna un lugar en la secuencia.</p>
+  <ol class="timeline">
+    {% for m in timed %}{% set a = m.article %}
+    <li>
+      <div class="small muted">{{ fmt_pub(a) }} · {{ a.media.name }}{% if a.author %} ({{ a.author }}){% endif %}{% if a.origin_label %} · {{ a.origin_label }}{% endif %}{% if a.is_syndicated %} · <span class="badge badge-syndicated">republicada</span>{% endif %}</div>
+      <a class="headline" href="/noticias/{{ a.id }}">{{ a.title }}</a>
+      {% if not a.is_demo and (a.url.startswith('https://') or a.url.startswith('http://')) %} <a class="small" href="{{ a.url }}" target="_blank" rel="noopener noreferrer nofollow">original ↗</a>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% if untimed %}
+  <h3>Sin hora de publicación</h3>
+  <ul>
+    {% for m in untimed %}{% set a = m.article %}
+    <li><span class="small muted">{{ fmt_pub(a) }} · {{ a.media.name }}{% if a.author %} ({{ a.author }}){% endif %}</span> — <a href="/noticias/{{ a.id }}">{{ a.title }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Relaciones entre las notas</h2>
+  {% if rels %}
+  <table class="table responsive">
+    <thead><tr><th>Tipo</th><th>Notas</th><th>Puntaje léxico</th><th>Revisión</th></tr></thead>
+    <tbody>
+    {% for r in rels %}
+      <tr>
+        <td data-label="Tipo"><a href="/relaciones/{{ r.id }}">{{ labels.get(r.relation_type, r.relation_type) }}</a></td>
+        <td data-label="Notas" class="small">{{ titles[r.article_a_id].media.name }}: {{ titles[r.article_a_id].title[:70] }}<br>{{ titles[r.article_b_id].media.name }}: {{ titles[r.article_b_id].title[:70] }}</td>
+        <td data-label="Puntaje" class="num">{{ '%.2f' | format(r.score or 0) }}</td>
+        <td data-label="Revisión"><span class="badge review-{{ r.review_status }}">{{ r.review_status }}</span></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="small muted">El puntaje mide coincidencia léxica (0 a 1). No es una probabilidad de coordinación.</p>
+  {% else %}<p class="muted">Sin relaciones registradas entre las notas activas.</p>{% endif %}
+</section>
+
+{% if antecedents %}
+<section class="card">
+  <h2>Antecedentes (reaparición del tema)</h2>
+  <ul>
+    {% for r in antecedents %}
+    {% set old = r.article_a if r.article_a.first_seen_at < r.article_b.first_seen_at else r.article_b %}
+    <li><a href="/relaciones/{{ r.id }}">{{ old.media.name }}: {{ old.title }}</a> <span class="small muted">({{ fmt_pub(old) }})</span></li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if user and user.is_admin %}
+<section class="card">
+  <h2>Correcciones manuales</h2>
+  <p class="small muted">Las correcciones se registran y el motor no las deshace al reprocesar.</p>
+  <form method="post" action="/grupos/{{ g.id }}/separar" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <fieldset class="stack">
+      <legend>Separar en un grupo nuevo</legend>
+      {% for m in active %}
+      <label class="inline"><input type="checkbox" name="article_ids" value="{{ m.article_id }}"> {{ m.article.media.name }}: {{ m.article.title[:90] }}</label>
+      {% endfor %}
+    </fieldset>
+    <label>Nota (opcional) <input name="note" maxlength="2000"></label>
+    <button type="submit" class="btn btn-ghost">Separar seleccionadas</button>
+  </form>
+  <h3>Quitar una nota del grupo</h3>
+  {% for m in active %}
+  <form method="post" action="/grupos/{{ g.id }}/quitar" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="article_id" value="{{ m.article_id }}">
+    <button type="submit" class="btn btn-small btn-ghost">Quitar</button> <span class="small">{{ m.article.media.name }}: {{ m.article.title[:90] }}</span>
+  </form>
+  {% endfor %}
+  <h3>Unir con otro grupo</h3>
+  <form method="post" action="/grupos/{{ g.id }}/unir" class="stack narrow">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Grupo a absorber
+      <select name="other_id" required>
+        {% for o in other_groups %}<option value="{{ o.id }}">#{{ o.id }} · {{ o.title[:80] }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Nota (opcional) <input name="note" maxlength="2000"></label>
+    <button type="submit" class="btn btn-ghost">Unir</button>
+  </form>
+</section>
+{% endif %}
+
+{% if excluded %}
+<section class="card">
+  <h2>Notas separadas manualmente</h2>
+  <ul>{% for m in excluded %}<li class="small">{{ m.article.media.name }}: <a href="/noticias/{{ m.article_id }}">{{ m.article.title }}</a></li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+{% if reviews and not public_view %}
+<section class="card">
+  <h2>Historial de correcciones</h2>
+  <ul class="small">{% for r in reviews %}<li>{{ r.created_at | local_dt }} · {{ r.decision }}{% if r.note %} · {{ r.note }}{% endif %}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% endblock %}

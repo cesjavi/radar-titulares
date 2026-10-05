@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Revisión · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Revisión manual</h1>
+<section class="card">
+  <h2>Alertas pendientes ({{ alerts | length }})</h2>
+  {% if alerts %}
+  <ul>{% for a in alerts %}<li><span class="badge prio-{{ a.priority }}">{{ a.priority }}</span> <a href="/alertas/{{ a.id }}">{{ a.title }}</a> <span class="small muted">· {{ a.independent_media_count }} medios · {{ a.priority_reason }}</span></li>{% endfor %}</ul>
+  {% else %}<p class="muted">No hay alertas pendientes.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>Relaciones sin revisar</h2>
+  <p class="small muted">Confirmar o rechazar en la comparación lado a lado. Las decisiones se conservan al reprocesar.</p>
+  {% if rels %}
+  <table class="table responsive">
+    <thead><tr><th>Tipo</th><th>Notas</th><th>Puntaje léxico</th></tr></thead>
+    <tbody>
+    {% for r in rels %}
+      <tr>
+        <td data-label="Tipo"><a href="/relaciones/{{ r.id }}">{{ labels.get(r.relation_type, r.relation_type) }}</a></td>
+        <td data-label="Notas" class="small">{{ r.article_a.media.name }}: {{ r.article_a.title[:80] }}<br>{{ r.article_b.media.name }}: {{ r.article_b.title[:80] }}</td>
+        <td data-label="Puntaje" class="num">{{ '%.2f' | format(r.score or 0) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No hay relaciones pendientes.</p>{% endif %}
+</section>
+{% endblock %}

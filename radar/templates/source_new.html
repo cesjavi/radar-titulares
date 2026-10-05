@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Agregar fuente' if media_slug else 'Agregar medio' }} · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>{{ 'Agregar fuente a ' ~ name if media_slug else 'Agregar medio' }}</h1>
+<p class="muted small">El sistema busca los feeds del sitio y los prueba antes de guardar. Solo se leen titulares, bajadas y metadatos públicos: se respeta <code>robots.txt</code> y no se evade ningún bloqueo. Un medio agregado así usa reglas genéricas: la sección sale de la URL y no se reconocen republicaciones salvo las firmadas por agencias.</p>
+{% if error %}<p class="alert alert-error">{{ error }}</p>{% endif %}
+
+<section class="card">
+  <form method="post" action="/fuentes/nueva/buscar" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="media_slug" value="{{ media_slug }}">
+    <label>Nombre del medio <input name="name" value="{{ name }}" required maxlength="128" {{ 'readonly' if media_slug }}></label>
+    <label>Dirección del sitio <input name="site_url" value="{{ site_url }}" required maxlength="512" placeholder="https://www.ejemplo.com.ar" {{ 'readonly' if media_slug }}></label>
+    <button class="btn" type="submit">Buscar fuentes</button>
+  </form>
+</section>
+
+{% if found is not none %}
+<section class="card">
+  <h2>Fuentes encontradas</h2>
+  <form method="post" action="/fuentes/nueva/guardar" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="media_slug" value="{{ media_slug }}">
+    <input type="hidden" name="name" value="{{ name }}">
+    <input type="hidden" name="site_url" value="{{ site_url }}">
+    {% if found %}
+    <table class="table responsive">
+      <thead><tr><th></th><th>Fuente</th><th>Notas</th></tr></thead>
+      <tbody>
+      {% for c in found %}
+        <tr>
+          <td><input type="checkbox" name="fuente" value="{{ c.kind }}|{{ c.url }}" checked></td>
+          <td>{{ c.label }}<div class="small muted break">{{ c.url }}</div><div class="small muted">ej.: {{ c.sample }}</div></td>
+          <td class="num">{{ c.items }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No se encontró ningún feed en las rutas habituales. Podés cargar la dirección de uno a mano.</p>
+    {% endif %}
+    <label>Otra fuente (opcional)
+      <input name="manual_url" value="{{ manual_url }}" maxlength="500" placeholder="https://www.ejemplo.com.ar/rss/politica.xml">
+    </label>
+    <label>Tipo
+      <select name="manual_kind">
+        {% for k, label in kinds.items() %}<option value="{{ k }}" {{ 'selected' if k == manual_kind }}>{{ label }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="btn" type="submit">Guardar medio y fuentes</button>
+  </form>
+</section>
+{% endif %}
+<p><a href="/fuentes">Volver a fuentes</a></p>
+{% endblock %}

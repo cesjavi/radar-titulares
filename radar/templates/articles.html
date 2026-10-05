@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Noticias · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Noticias</h1>
+<form class="filters" method="get" action="/noticias"
+      hx-get="/noticias" hx-target="#results" hx-push-url="true"
+      hx-trigger="change, keyup changed delay:400ms from:input[name=q], submit">
+  <label>Medio
+    <select name="media">
+      <option value="">Todos</option>
+      {% for m in media_options %}<option value="{{ m.slug }}" {{ 'selected' if filters.media == m.slug }}>{{ m.name }}{{ ' (DEMO)' if m.is_demo }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Tema
+    <select name="topic">
+      <option value="">Todos</option>
+      {% for t in topic_options %}<option value="{{ t.slug }}" {{ 'selected' if filters.topic == t.slug }}>{{ t.name }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Sección
+    <select name="seccion">
+      <option value="">Todas</option>
+      {% for s in section_options %}<option value="{{ s }}" {{ 'selected' if filters.seccion == s }}>{{ s }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Período
+    <select name="periodo">
+      <option value="">Todo</option>
+      {% for k, v in (('24h', 'Últimas 24 h'), ('72h', 'Últimas 72 h'), ('7d', '7 días'), ('30d', '30 días')) %}<option value="{{ k }}" {{ 'selected' if filters.periodo == k }}>{{ v }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Autoría
+    <select name="autor">
+      <option value="">Todas</option>
+      <option value="con_autor" {{ 'selected' if filters.autor == 'con_autor' }}>✍️ Con autor (firmadas)</option>
+      <option value="sin_autor" {{ 'selected' if filters.autor == 'sin_autor' }}>⚪ Sin firma (redacción/agencia)</option>
+    </select>
+  </label>
+  <label class="inline"><input type="checkbox" name="relacionadas" value="true" {{ 'checked' if filters.relacionadas }}> Solo con coincidencias</label>
+  <label class="grow">Buscar en titular, bajada y autor
+    <input type="search" name="q" value="{{ filters.q }}" maxlength="200" placeholder="p. ej. inflación o apellido de autor">
+  </label>
+  <button type="submit" class="btn">Filtrar</button>
+</form>
+<div class="legend-bar">
+  <span class="legend-title">Leyenda de autoría:</span>
+  <span class="badge badge-author-has" title="El medio publicó la nota con firma y apellido del autor">✍️ Con autor (nota firmada)</span>
+  <span class="badge badge-author-none" title="El medio publicó la nota sin firma individual (redacción general o cable)">⚪ Sin firma (redacción general / agencia)</span>
+</div>
+<div id="results">
+  {% include "partials/article_table.html" %}
+</div>
+{% endblock %}

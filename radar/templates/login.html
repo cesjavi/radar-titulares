@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Ingresar · Radar de Titulares{% endblock %}
+{% block content %}
+<section class="card login-card">
+  <h1>Radar de Titulares</h1>
+  <p class="muted">Ingresá con tu usuario administrador.</p>
+  {% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/login" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>Usuario
+      <input name="username" autocomplete="username" required maxlength="64" value="{{ username or '' }}" autofocus>
+    </label>
+    <label>Contraseña
+      <input name="password" type="password" autocomplete="current-password" required maxlength="256">
+    </label>
+    <button type="submit" class="btn">Ingresar</button>
+  </form>
+</section>
+{% endblock %}

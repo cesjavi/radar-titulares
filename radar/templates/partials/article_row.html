@@ -1,0 +1,22 @@
+<tr>
+  <td data-label="Medio">
+    <span class="media-tag">{{ a.media.name }}</span>
+    {% if a.origin_label %}<div class="small muted">{{ a.origin_label }}</div>{% endif %}
+    {% if a.is_syndicated %}<span class="badge badge-syndicated" title="Contenido de agencia o tercero republicado">republicada</span>{% endif %}
+    {% if a.is_demo %}<span class="badge badge-demo">DEMO</span>{% endif %}
+  </td>
+  <td data-label="Titular">
+    <a href="/noticias/{{ a.id }}" class="headline">{{ a.title }}</a>
+    {% if a.subtitle %}<div class="muted small clamp">{{ a.subtitle }}</div>{% endif %}
+    <div class="small muted" style="margin-top: 4px;">
+      {% if a.author %}
+        <span class="badge badge-author-has" title="Nota firmada por su autor">✍️ {{ a.author }}</span>
+      {% else %}
+        <span class="badge badge-author-none" title="Nota sin firma individual (publicada por la redacción general o agencia)">Sin firma</span>
+      {% endif %}
+      · cobertura: {{ a.coverage }}{% if a.section %} · {{ a.section }}{% endif %}
+    </div>
+  </td>
+  <td data-label="Publicada" class="nowrap small">{{ fmt_pub(a) }}</td>
+  <td data-label="Detectada" class="nowrap small">{{ a.first_seen_at | local_dt }}</td>
+</tr>

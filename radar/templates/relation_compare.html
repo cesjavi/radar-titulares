@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Comparación · Radar de Titulares{% endblock %}
+{% macro segs(parts) %}{% for text, on in parts %}{% if on %}<mark>{{ text }}</mark>{% else %}{{ text }}{% endif %}{% endfor %}{% endmacro %}
+{% block content %}
+<p><a href="/grupos">← Grupos</a>{% for g in groups %} · <a href="/grupos/{{ g.id }}">Grupo #{{ g.id }}</a>{% endfor %}</p>
+<section class="card">
+  <div class="card-head">
+    <h1>{{ label }}</h1>
+    <span class="badge review-{{ rel.review_status }}">Revisión: {{ rel.review_status }}</span>
+  </div>
+  <p class="origin-badges">
+    <span class="badge origin-rules">Detectada por reglas</span>
+    {% if ai and (not public_view or rel.review_status == 'confirmada') %}<span class="badge origin-ai">Analizada por IA</span>{% endif %}
+    {% if rel.review_status == 'confirmada' %}<span class="badge origin-user">Confirmada por el usuario</span>
+    {% elif rel.review_status == 'rechazada' %}<span class="badge review-rechazada">Rechazada por el usuario</span>{% endif %}
+  </p>
+  <p class="small muted">Comparación léxica. Lo resaltado son frases y términos compartidos. <strong>Enfoque:</strong> {{ evidence.enfoque or 'sin verificar' }}. El puntaje ({{ '%.2f' | format(rel.score or 0) }}) no es una probabilidad de coordinación.</p>
+  {% for n in evidence.notas or [] %}<p class="alert alert-warn">{{ n }}</p>{% endfor %}
+</section>
+
+<div class="compare">
+  {% for s in sides %}{% set a = s.a %}
+  <article class="card">
+    <p class="small muted"><span class="media-tag">{{ a.media.name }}</span>{% if a.origin_label %} · {{ a.origin_label }}{% endif %}{% if a.is_syndicated %} · <span class="badge badge-syndicated">republicada</span>{% endif %}{% if a.is_demo %} <span class="badge badge-demo">DEMO</span>{% endif %}</p>
+    <h2 class="headline-md">{{ segs(s.title) }}</h2>
+    {% if a.author %}
+      <p class="small"><span class="badge badge-author-has">✍️ Por {{ a.author }}</span></p>
+    {% else %}
+      <p class="small"><span class="badge badge-author-none">⚪ Sin firma individual</span></p>
+    {% endif %}
+    <dl class="meta">
+      <dt>Publicada</dt><dd>{{ fmt_pub(a) }}</dd>
+      <dt>Detectada</dt><dd>{{ a.first_seen_at | local_dt }}</dd>
+      <dt>Cobertura</dt><dd>{{ a.coverage }}</dd>
+    </dl>
+    <p><a href="/noticias/{{ a.id }}">Ficha</a>{% if not a.is_demo and (a.url.startswith('https://') or a.url.startswith('http://')) %} · <a href="{{ a.url }}" target="_blank" rel="noopener noreferrer nofollow">Nota original ↗</a>{% endif %}</p>
+  </article>
+  {% endfor %}
+</div>
+
+<section class="card">
+  <h2>Evidencia</h2>
+  <dl class="meta">
+    {% if evidence.frases %}<dt>Frases compartidas</dt><dd>{% for f in evidence.frases %}<mark>{{ f }}</mark>{% if not loop.last %} · {% endif %}{% endfor %}</dd>{% endif %}
+    {% if evidence.entidades %}<dt>Entidades compartidas</dt><dd>{{ evidence.entidades | join(', ') }}{% if evidence.entidades_distintivas %} <span class="small muted">(poco frecuentes: {{ evidence.entidades_distintivas | join(', ') }})</span>{% endif %}</dd>{% endif %}
+    {% if evidence.terminos %}<dt>Términos que más aportan</dt><dd>{{ evidence.terminos | join(', ') }}</dd>{% endif %}
+    {% if evidence.cifras_a or evidence.cifras_b %}<dt>Cifras</dt><dd>{{ evidence.cifras_a | join(', ') or '—' }} / {{ evidence.cifras_b | join(', ') or '—' }}</dd>{% endif %}
+    {% if evidence.polaridad_a or evidence.polaridad_b %}<dt>Negaciones / cese</dt><dd>{{ evidence.polaridad_a | join(', ') or '—' }} / {{ evidence.polaridad_b | join(', ') or '—' }}</dd>{% endif %}
+    {% if evidence.referencia %}<dt>Referencia explícita</dt><dd>{{ evidence.referencia.tipo }}{% if evidence.referencia.url %}: <span class="break small">{{ evidence.referencia.url }}</span>{% endif %}{% if evidence.referencia.medio %}: menciona a {{ evidence.referencia.medio }}{% endif %}</dd>{% endif %}
+    <dt>Diferencia temporal</dt>
+    <dd>{% if rel.time_delta_seconds is not none %}{{ (rel.time_delta_seconds | abs / 60) | round | int }} min entre publicaciones{% else %}no determinada{% endif %}<div class="small muted">{{ rel.time_note }}</div></dd>
+  </dl>
+  <h3>Puntajes parciales</h3>
+  <ul class="small">{% for k, v in scores.items() %}<li>{{ k | replace('_', ' ') }}: {{ v }}</li>{% endfor %}</ul>
+  <h3>Reglas aplicadas</h3>
+  <ul class="small">{% for r in rules %}<li><strong>{{ r.id }}</strong>: {{ r.regla }}</li>{% endfor %}</ul>
+  <p class="small muted">Método: {{ rel.method }} · versión {{ rel.algorithm_version }}</p>
+</section>
+
+{% if not public_view or (ai and rel.review_status == 'confirmada') %}
+<section class="card" id="ia">
+  <h2>Análisis con IA</h2>
+  {% if ai_message %}<p class="alert alert-warn" role="status">{{ ai_message }}</p>{% endif %}
+  {% if ai %}
+  <p class="small muted">Proveedor {{ ai.provider }} · modelo {{ ai.model }} · instrucciones {{ ai.prompt_version }} · {{ ai.created_at | local_dt }}. Resultado validado (esquema y citas verificadas en el texto). <strong>No determina la verdad de ninguna afirmación</strong>; la decisión final es la revisión humana.</p>
+  {% if ai_flags %}<div class="alert alert-warn"><strong>Discrepancias para revisión:</strong><ul>{% for f in ai_flags %}<li>{{ f }}</li>{% endfor %}</ul></div>{% endif %}
+  <dl class="meta">
+    <dt>¿Mismo hecho?</dt><dd>{{ ai_data.mismo_hecho }}</dd>
+    <dt>Tema compartido</dt><dd>{{ ai_data.tema_compartido }}</dd>
+    <dt>Enfoque</dt><dd>{{ ai_data.enfoque }}</dd>
+    <dt>Entidades compartidas</dt><dd>{{ ai_data.entidades_compartidas | join(', ') or '—' }}</dd>
+    <dt>Alcance geográfico</dt><dd>A: {{ ai_data.alcance_geografico.a }} · B: {{ ai_data.alcance_geografico.b }} · coincide: {{ ai_data.alcance_geografico.coincide }}</dd>
+    <dt>Período de los datos</dt><dd>A: {{ ai_data.periodo_de_los_datos.a }} · B: {{ ai_data.periodo_de_los_datos.b }} · coincide: {{ ai_data.periodo_de_los_datos.coincide }}{% if ai_data.periodo_de_los_datos.nota %}<div class="small muted">{{ ai_data.periodo_de_los_datos.nota }}</div>{% endif %}</dd>
+    <dt>Cita explícita entre notas</dt><dd>{{ ai_data.relacion_explicita_de_cita.existe }}{% if ai_data.relacion_explicita_de_cita.detalle %} · {{ ai_data.relacion_explicita_de_cita.detalle }}{% endif %}</dd>
+    <dt>Explicación</dt><dd>{{ ai_data.explicacion_breve }}</dd>
+  </dl>
+  {% if ai_data.afirmaciones_principales %}
+  <h3>Afirmaciones principales</h3>
+  <table class="table responsive">
+    <thead><tr><th>Nota</th><th>Tipo</th><th>Afirmación</th><th>Fragmento</th></tr></thead>
+    <tbody>{% for c in ai_data.afirmaciones_principales %}<tr><td data-label="Nota">{{ c.articulo }}</td><td data-label="Tipo">{{ c.tipo | replace('_', ' ') }}</td><td data-label="Afirmación">{{ c.texto }}</td><td data-label="Fragmento" class="small">“{{ c.fragmento }}”</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+  {% if ai_data.atribuciones_de_responsabilidad %}
+  <h3>Atribuciones de responsabilidad</h3>
+  <ul>{% for x in ai_data.atribuciones_de_responsabilidad %}<li>{{ x.articulo }}: {{ x.responsable }} — {{ x.sobre }} <span class="small muted">(“{{ x.fragmento }}”)</span></li>{% endfor %}</ul>
+  {% endif %}
+  {% if ai_data.diferencias_de_cifras %}
+  <h3>Diferencias de cifras</h3>
+  <ul>{% for d in ai_data.diferencias_de_cifras %}<li>{{ d.descripcion }}: A {{ d.cifra_a }} / B {{ d.cifra_b }}</li>{% endfor %}</ul>
+  {% endif %}
+  <h3>Fragmentos de evidencia</h3>
+  <ul class="small">{% for f in ai_data.fragmentos_de_evidencia %}<li>{{ f.articulo }}: “{{ f.texto }}”</li>{% endfor %}</ul>
+  {% if ai_data.limitaciones %}<h3>Limitaciones</h3><ul class="small">{% for l in ai_data.limitaciones %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
+  {% else %}
+  <p class="muted">Sin análisis con IA para este par.{% if not ai_enabled %} La IA externa está desactivada (opcional).{% endif %}</p>
+  {% endif %}
+  {% if ai_attempts and not ai %}<p class="small muted">Intentos anteriores: {% for x in ai_attempts %}{{ x.status }}{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+  {% if user and user.is_admin and ai_enabled %}
+  <form method="post" action="/relaciones/{{ rel.id }}/analizar-ia" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-ghost" {{ 'disabled' if ai_blocked }}>{{ 'Volver a analizar' if ai else 'Analizar con IA' }}</button>
+    {% if ai_blocked %}<span class="small muted">{{ ai_blocked }}</span>{% endif %}
+  </form>
+  {% endif %}
+</section>
+
+{% endif %}
+
+{% if user and user.is_admin %}
+<section class="card">
+  <h2>Revisión manual</h2>
+  <form method="post" action="/relaciones/{{ rel.id }}/revisar" class="stack narrow">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Nota <input name="note" maxlength="2000" value="{{ rel.review_note or '' }}"></label>
+    <div class="row-buttons">
+      <button type="submit" name="decision" value="confirmada" class="btn">Confirmar</button>
+      <button type="submit" name="decision" value="rechazada" class="btn btn-ghost">Rechazar</button>
+      {% if rel.review_status != 'pendiente' %}<button type="submit" name="decision" value="pendiente" class="btn btn-ghost">Volver a pendiente</button>{% endif %}
+    </div>
+  </form>
+  <p class="small muted">Rechazar impide que el motor agrupe estas dos notas por esta relación; la decisión se conserva al reprocesar.</p>
+</section>
+{% endif %}
+{% if reviews and not public_view %}
+<section class="card"><h2>Historial</h2><ul class="small">{% for r in reviews %}<li>{{ r.created_at | local_dt }} · {{ r.decision }}{% if r.note %} · {{ r.note }}{% endif %}</li>{% endfor %}</ul></section>
+{% endif %}
+{% endblock %}

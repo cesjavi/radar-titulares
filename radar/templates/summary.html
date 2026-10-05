@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Resumen · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Resumen</h1>
+
+<div class="stats">
+  <div class="stat"><span class="stat-value">{{ total }}</span><span class="stat-label">Noticias registradas</span></div>
+{% if not (public_view and public_alerts == 'ninguna') %}
+  <a class="stat" href="/alertas"><span class="stat-value">{{ new_alerts }}</span><span class="stat-label">{{ 'Alertas publicadas' if public_view else 'Alertas pendientes' }} · alta {{ alert_prio.get('alta', 0) }} · media {{ alert_prio.get('media', 0) }} · baja {{ alert_prio.get('baja', 0) }}</span></a>
+  {% endif %}
+  <div class="stat {{ 'stat-warn' if failing }}"><span class="stat-value">{{ failing }}</span><span class="stat-label">Subfuentes con errores</span></div>
+</div>
+
+{% if top_alerts %}
+<section class="card">
+  <h2>{{ 'Alertas revisadas' if public_view else 'Alertas para revisar primero' }}</h2>
+  <ul>{% for a in top_alerts %}<li><span class="badge prio-{{ a.priority }}">{{ a.priority }}</span> <a href="/alertas/{{ a.id }}">{{ a.title }}</a> <span class="small muted">· {{ a.independent_media_count }} medios</span></li>{% endfor %}</ul>
+  <p class="small muted">La prioridad indica qué revisar primero; no significa falsedad ni coordinación.</p>
+</section>
+{% endif %}
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Detectadas en las últimas 24 h por medio</h2>
+    <table class="table compact">
+      <tbody>
+      {% for m, n in per_media %}
+        {% set st = health.get(m.id, 'operativa') %}
+        <tr><td><a href="/noticias?media={{ m.slug }}">{{ m.name }}</a>{% if m.is_demo %} <span class="badge badge-demo">DEMO</span>{% endif %}
+          {% if st not in ('operativa', 'sin_consultar') %} <a href="/fuentes" class="badge state-{{ st }}">{{ labels[st] }}</a>{% endif %}</td>
+          <td class="num">{% if n == 0 and st in ('caida', 'bloqueada') %}<span class="error-text" title="La recolección falló: no se puede afirmar que no haya noticias">sin datos</span>{% else %}{{ n }}{% endif %}</td></tr>
+      {% else %}
+        <tr><td class="muted">Sin medios configurados. Ejecutá <code>python -m radar init-db</code>.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Temas de seguimiento (últimas 24 h)</h2>
+    <table class="table compact">
+      <tbody>
+      {% for t, n in per_topic %}
+        <tr><td><a href="/noticias?topic={{ t.slug }}">{{ t.name }}</a></td><td class="num">{{ n }}</td></tr>
+      {% else %}
+        <tr><td class="muted">No hay temas activos.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Últimas detectadas</h2>
+  <div class="legend-bar small" style="margin-bottom: 10px;">
+    <span class="legend-title">Autoría:</span>
+    <span class="badge badge-author-has">✍️ Con autor (nota firmada)</span>
+    <span class="badge badge-author-none">⚪ Sin firma (redacción / agencia)</span>
+  </div>
+  {% if latest %}
+  <table class="table responsive">
+    <thead><tr><th>Medio</th><th>Titular</th><th>Publicada</th><th>Detectada</th></tr></thead>
+    <tbody>{% for a in latest %}{% include "partials/article_row.html" %}{% endfor %}</tbody>
+  </table>
+  <p><a href="/noticias">Ver todas →</a></p>
+  {% else %}
+  <p class="muted">Todavía no hay noticias. Ejecutá <code>python -m radar collect</code>.</p>
+  {% endif %}
+</section>
+
+{% if not public_view %}
+<section class="card">
+  <h2>Últimas ejecuciones de recolección</h2>
+  {% include "partials/runs_table.html" %}
+  <p><a href="/fuentes">Estado de fuentes →</a></p>
+</section>
+{% endif %}
+{% endblock %}

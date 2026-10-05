@@ -1,0 +1,10 @@
+[project]
+name = "radar-titulares"
+version = "0.1.0"
+description = "Radar de Titulares: monitoreo de Perfil, El Destape Web e Infobae"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

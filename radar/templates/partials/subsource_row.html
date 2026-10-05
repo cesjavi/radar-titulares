@@ -1,0 +1,27 @@
+<tr id="sub-{{ s.id }}">
+  <td data-label="Subfuente">{{ s.name }}
+    <div class="small muted">{{ s.kind }} · {{ s.section }} · cada {{ (s.min_interval_seconds / 60) | round | int }} min</div>
+    <div class="small muted break">{{ s.url }}</div>
+  </td>
+  <td data-label="Estado">
+    <span class="badge state-{{ state }}">{{ labels[state] }}</span>
+    {% if s.last_http_status %}<span class="muted small">HTTP {{ s.last_http_status }}</span>{% endif %}
+    {% if s.consecutive_failures %}<div class="small muted">{{ s.consecutive_failures }} falla(s) seguidas</div>{% endif %}
+    {% if s.last_error and not public_view and (s.consecutive_failures or state in ('bloqueada', 'vacia')) %}<div class="small error-text clamp" title="{{ s.last_error }}">{{ s.last_error }}</div>{% endif %}
+  </td>
+  <td data-label="Último intento" class="small nowrap">{{ s.last_fetch_at | local_dt }}</td>
+  <td data-label="Último éxito" class="small nowrap">{{ s.last_success_at | local_dt }}</td>
+  <td data-label="Noticias" class="num">
+    {% if cov %}{{ cov.total }}{% elif state in ('sin_consultar', 'pausada') %}—{% elif state in ('operativa', 'sin_cambios') %}0{% else %}<span class="error-text" title="La extracción falló: el cero no indica ausencia de noticias">sin datos</span>{% endif %}
+    {% if s.last_items_found is not none %}<div class="small muted">{{ s.last_items_found }} en el último éxito</div>{% endif %}
+  </td>
+  <td data-label="Cobertura" class="small">
+    {% if cov and cov.total %}{{ cov.level }}<div class="muted">bajada {{ cov.pct(cov.with_subtitle) }}% · cuerpo {{ cov.pct(cov.with_body) }}%</div>{% else %}—{% endif %}
+  </td>
+  <td data-label="">
+    {% if user and user.is_admin and s.kind != 'demo' %}
+    <button class="btn btn-small btn-ghost" hx-post="/fuentes/subfuente/{{ s.id }}/alternar"
+            hx-target="#sub-{{ s.id }}" hx-swap="outerHTML">{{ 'Pausar' if s.enabled else 'Activar' }}</button>
+    {% endif %}
+  </td>
+</tr>

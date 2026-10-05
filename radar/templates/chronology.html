@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Cronología · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Cronología de grupos</h1>
+<p class="small muted">Para cada grupo se muestran por separado la <strong>primera detección</strong> (cuándo lo vio el radar, depende del momento de consulta) y la <strong>primera publicación según la fuente</strong> (solo entre notas con hora declarada). Ninguna de las dos indica qué medio originó la información.</p>
+<form method="get" action="/cronologia" class="filters">
+  <label>Período
+    <select name="dias">{% for d in (1, 3, 7, 14, 30) %}<option value="{{ d }}" {{ 'selected' if dias == d }}>Últimos {{ d }} día{{ 's' if d > 1 }}</option>{% endfor %}</select>
+  </label>
+  <button class="btn" type="submit">Ver</button>
+</form>
+{% if items %}
+<table class="table responsive">
+  <thead><tr><th>Grupo</th><th>Primera detección</th><th>Primera publicación (fuente)</th><th>Con hora</th></tr></thead>
+  <tbody>
+  {% for it in items %}
+    <tr>
+      <td data-label="Grupo"><a href="/grupos/{{ it.g.id }}">{{ it.g.title }}</a><div class="small muted">{{ it.g.independent_media_count }} medios independientes</div></td>
+      <td data-label="Primera detección" class="small">{% if it.first_detected %}{{ it.first_detected.first_seen_at | local_dt }}<div class="muted">{{ it.first_detected.media.name }}</div>{% endif %}</td>
+      <td data-label="Primera publicación" class="small">{% if it.first_published %}{{ it.first_published.published_at | local_dt }}<div class="muted">{{ it.first_published.media.name }}</div>{% else %}no determinable{% endif %}</td>
+      <td data-label="Con hora" class="num small">{{ it.timed }}/{{ it.total }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="muted">Sin grupos en el período.</p>{% endif %}
+{% endblock %}

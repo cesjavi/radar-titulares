@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Métricas · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Secuencias entre medios</h1>
+<section class="card">
+  <p><strong>Métricas descriptivas.</strong> Cuentan, en los grupos donde coinciden dos medios, cuál publicó o fue detectado antes. Publicar antes <strong>no</strong> indica que un medio dirija, origine o copie a otro: puede deberse a horarios de cierre, a una fuente común (agencia, conferencia, informe) o a la frecuencia de consulta del radar.</p>
+  <p class="small muted">Se excluyen notas republicadas. Se toma la primera nota de cada medio en el grupo. Grupos analizados: {{ m.groups }}.</p>
+</section>
+{% if m.pairs %}
+<section class="card">
+  <h2>Por pares de medios</h2>
+  <table class="table responsive">
+    <thead><tr><th>Par</th><th>Grupos en común</th><th>Por publicación (con hora en ambos)</th><th>Cobertura temporal</th><th>Mediana de diferencia</th><th>Por detección del radar</th></tr></thead>
+    <tbody>
+    {% for p in m.pairs %}
+      <tr>
+        <td data-label="Par">{{ p.a }} / {{ p.b }}</td>
+        <td data-label="Grupos" class="num">{{ p.groups }}</td>
+        <td data-label="Publicación" class="small">{{ p.a }} antes: {{ p.pub_a_first }} · {{ p.b }} antes: {{ p.pub_b_first }} · simultáneas: {{ p.pub_tie }}<div class="muted">sin hora en alguno: {{ p.pub_unknown }}</div></td>
+        <td data-label="Cobertura" class="num">{{ p.pub_coverage }}%</td>
+        <td data-label="Mediana" class="num">{% if p.median_gap_min is not none %}{{ p.median_gap_min }} min{% else %}—{% endif %}</td>
+        <td data-label="Detección" class="small">{{ p.a }} antes: {{ p.det_a_first }} · {{ p.b }} antes: {{ p.det_b_first }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if m.pairs | sum(attribute='groups') < 30 %}<p class="small muted">Pocos casos: las proporciones no son representativas.</p>{% endif %}
+</section>
+<section class="card">
+  <h2>Precisión de fechas por medio (notas en grupos)</h2>
+  <table class="table compact">
+    <thead><tr><th>Medio</th><th>Fecha y hora</th><th>Solo fecha</th><th>Sin dato</th></tr></thead>
+    <tbody>{% for name, v in m.precision.items() %}<tr><td>{{ name }}</td><td class="num">{{ v.datetime }}</td><td class="num">{{ v.date }}</td><td class="num">{{ v.none }}</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% else %}<p class="muted">Todavía no hay grupos con dos o más medios.</p>{% endif %}
+{% endblock %}

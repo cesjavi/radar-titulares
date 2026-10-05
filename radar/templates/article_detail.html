@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Noticia · Radar de Titulares{% endblock %}
+{% block content %}
+<p><a href="/noticias">← Noticias</a></p>
+<article class="card">
+  <p class="muted small">
+    <span class="media-tag">{{ a.media.name }}</span>
+    {% if a.origin_label %} · {{ a.origin_label }}{% endif %}
+    {% if a.is_syndicated %}<span class="badge badge-syndicated">republicada (agencia/tercero)</span>{% endif %}
+    {% if a.is_demo %}<span class="badge badge-demo">DEMO · contenido ficticio</span>{% endif %}
+    {% if a.section %} · {{ a.section }}{% endif %}
+  </p>
+  <h1 class="headline-lg">{{ a.title }}</h1>
+  {% if a.subtitle %}<p class="lead">{{ a.subtitle }}</p>{% endif %}
+  <p class="small">
+    {% if a.author %}
+      <span class="badge badge-author-has">✍️ Nota firmada: Por {{ a.author }}</span>
+    {% else %}
+      <span class="badge badge-author-none">⚪ Sin firma individual (publicada por la redacción o agencia)</span>
+    {% endif %}
+  </p>
+  {% if not a.is_demo and (a.url.startswith('https://') or a.url.startswith('http://')) %}
+  <p><a href="{{ a.url }}" target="_blank" rel="noopener noreferrer nofollow">Abrir nota original ↗</a></p>
+  {% endif %}
+
+  <dl class="meta">
+    <dt>Publicada (según la fuente)</dt><dd>{{ fmt_pub(a, 'published') }}</dd>
+    <dt>Modificada (según la fuente)</dt><dd>{{ fmt_pub(a, 'modified') }}</dd>
+    <dt>Primera detección (radar)</dt><dd>{{ a.first_seen_at | local_dt }}</dd>
+    <dt>Última detección (radar)</dt><dd>{{ a.last_seen_at | local_dt }}</dd>
+    <dt>Descubierta por</dt><dd>{{ a.discovery_method }}{% if a.subsource %} · {{ a.subsource.name }}{% endif %}</dd>
+    <dt>Cobertura disponible</dt><dd>{{ a.coverage }}</dd>
+    <dt>Lectura de la página</dt><dd>{{ {'feed_only': 'No leída (solo datos del feed)', 'ok': 'Metadatos obtenidos', 'partial': 'Parcial', 'failed': 'Fallida', 'blocked': 'Bloqueada por el sitio'}.get(a.extraction_status, a.extraction_status) }}{% if a.enrich_error and not public_view %}<div class="small muted">{{ a.enrich_error }}</div>{% endif %}</dd>
+    <dt>URL canónica</dt><dd class="break">{{ a.canonical_url }}</dd>
+    {% if a.final_url and a.final_url != a.url %}<dt>URL final (tras redirecciones)</dt><dd class="break">{{ a.final_url }}</dd>{% endif %}
+    {% if a.source_id %}<dt>Identificador de origen</dt><dd class="mono small">{{ a.source_id }}</dd>{% endif %}
+    {% if a.keywords %}<dt>Palabras clave de la fuente</dt><dd>{{ a.keywords }}</dd>{% endif %}
+    <dt>Hash de contenido</dt><dd class="mono small break">{{ a.content_hash }}</dd>
+  </dl>
+</article>
+
+<section class="card">
+  <h2>Procedencia</h2>
+  <table class="table responsive">
+    <thead><tr><th>Subfuente</th><th>Primera vez</th><th>Última vez</th><th>Veces</th></tr></thead>
+    <tbody>
+    {% for s in a.sightings %}
+      <tr>
+        <td data-label="Subfuente">{{ s.subsource.name }} <span class="muted small">({{ s.subsource.kind }})</span><div class="small muted break">{{ s.item_url }}</div></td>
+        <td data-label="Primera vez" class="small nowrap">{{ s.first_seen_at | local_dt }}</td>
+        <td data-label="Última vez" class="small nowrap">{{ s.last_seen_at | local_dt }}</td>
+        <td data-label="Veces" class="num">{{ s.times_seen }}</td>
+      </tr>
+    {% else %}
+      <tr><td class="muted">Sin registros de procedencia.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if a.references %}
+<section class="card">
+  <h2>Referencias explícitas a otros medios</h2>
+  <ul>
+    {% for r in a.references %}
+    <li><strong>{{ r.referenced_media }}</strong> · {{ 'mención en el texto' if r.kind == 'mencion' else 'enlace en el cuerpo' }}:
+      {% if r.kind == 'enlace' and (r.evidence.startswith('https://') or r.evidence.startswith('http://')) %}<a href="{{ r.evidence }}" rel="noopener noreferrer nofollow" target="_blank" class="break small">{{ r.evidence }}</a>{% else %}<span class="small">{{ r.evidence }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Temas que coinciden</h2>
+  {% if topic_hits %}
+  <ul>{% for t, hits in topic_hits %}<li><strong>{{ t.name }}</strong> — evidencia: {{ hits | join(', ') }}</li>{% endfor %}</ul>
+  {% else %}<p class="muted">Ningún tema activo coincide.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Historial de titular y bajada</h2>
+  <ol class="timeline">
+    {% for v in a.versions | reverse %}
+    <li>
+      <div class="small muted">{{ v.detected_at | local_dt('%d/%m/%Y %H:%M:%S') }}{% if loop.last %} · versión original detectada{% endif %}{% if v.origin == 'pagina' %} · bajada completada desde la página (no es un cambio del medio){% endif %}</div>
+      <div class="headline">{{ v.title }}</div>
+      {% if v.subtitle %}<div class="small">{{ v.subtitle }}</div>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+
+<section class="card">
+  <h2>Relaciones con otras notas</h2>
+  {% if relations %}
+  <ul>
+    {% for r, other, evidence in relations %}
+    <li>
+      <a href="/relaciones/{{ r.id }}">{{ rel_labels.get(r.relation_type, r.relation_type) }}</a>
+      {% if other %}· <span class="media-tag">{{ other.media.name }}</span> {{ other.title }}{% endif %}
+      <span class="muted small">(puntaje léxico {{ '%.2f' | format(r.score or 0) }} · {{ r.review_status }})</span>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="small muted">Coincidencias léxicas: no implican que el enfoque sea el mismo ni que haya coordinación.</p>
+  {% else %}<p class="muted">Sin relaciones detectadas.</p>{% endif %}
+  {% for g in groups %}<p class="small">Integra el <a href="/grupos/{{ g.id }}">grupo #{{ g.id }}: {{ g.title }}</a></p>{% endfor %}
+</section>
+
+{% if reviews and not public_view %}
+<section class="card">
+  <h2>Revisiones manuales</h2>
+  <ul>{% for r in reviews %}<li>{{ r.created_at | local_dt }} · {{ r.decision }}{% if r.note %}: {{ r.note }}{% endif %}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% endblock %}

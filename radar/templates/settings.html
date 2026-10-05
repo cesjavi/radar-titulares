@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Configuración · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Configuración</h1>
+
+<section class="card" id="temas">
+  <h2>Temas de seguimiento</h2>
+  <p class="muted small">Una palabra o frase por línea. La coincidencia ignora mayúsculas y tildes y se busca en titular, bajada y palabras clave de la fuente.</p>
+  {% for t in topics %}
+  <details class="topic" id="tema-{{ t.id }}">
+    <summary><strong>{{ t.name }}</strong> {% if not t.enabled %}<span class="badge badge-skipped">Inactivo</span>{% endif %}
+      <span class="muted small">· {{ t.keyword_list() | length }} palabras clave</span></summary>
+    <form method="post" action="/configuracion/temas/{{ t.id }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label>Nombre <input name="name" value="{{ t.name }}" required maxlength="128"></label>
+      <label>Descripción <input name="description" value="{{ t.description or '' }}" maxlength="1000"></label>
+      <div class="grid-2">
+        <label>Palabras clave <textarea name="keywords" rows="6">{{ t.keywords }}</textarea></label>
+        <label>Excluir si aparece <textarea name="exclude_keywords" rows="6">{{ t.exclude_keywords }}</textarea></label>
+      </div>
+      <label class="inline"><input type="checkbox" name="enabled" {{ 'checked' if t.enabled }}> Activo</label>
+      <button type="submit" class="btn">Guardar</button>
+    </form>
+  </details>
+  {% endfor %}
+
+  <h3>Nuevo tema</h3>
+  {% if topic_error %}<p class="alert alert-error">{{ topic_error }}</p>{% endif %}
+  <form method="post" action="/configuracion/temas" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Nombre <input name="name" required maxlength="128"></label>
+    <label>Descripción <input name="description" maxlength="1000"></label>
+    <div class="grid-2">
+      <label>Palabras clave <textarea name="keywords" rows="4"></textarea></label>
+      <label>Excluir si aparece <textarea name="exclude_keywords" rows="4"></textarea></label>
+    </div>
+    <button type="submit" class="btn">Crear tema</button>
+  </form>
+</section>
+
+<section class="card" id="secciones">
+  <h2>Secciones prioritarias</h2>
+  <p class="muted small">Las notas recientes de estas secciones (además de las que coinciden con un tema activo o no tienen bajada) se leen en la página para completar bajada, autor, fechas, URL canónica y referencias. Usar el nombre de la sección en la URL del medio, p. ej. <code>politica</code>, <code>economia</code>, <code>canal-e</code>.</p>
+  <form method="post" action="/configuracion/secciones" class="stack narrow">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Secciones (separadas por coma) <input name="sections" value="{{ priority_sections }}" maxlength="1000"></label>
+    <button type="submit" class="btn">Guardar</button>
+  </form>
+  <p class="muted small">Las subfuentes por sección (RSS, sitemaps y portadas HTML) se activan o pausan en <a href="/fuentes">Estado de fuentes</a>.</p>
+</section>
+
+<section class="card" id="alertas">
+  <h2>Alertas</h2>
+  <p class="muted small">Los cambios se aplican en el próximo análisis. La prioridad indica qué revisar primero; no significa falsedad ni coordinación.</p>
+  <form method="post" action="/configuracion/alertas" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="grid-2">
+      <label>Mínimo de medios independientes <input type="number" min="2" max="10" name="alert_min_independent_media" value="{{ alert_cfg.alert_min_independent_media }}"></label>
+      <label>Prioridad mínima para crear alertas
+        <select name="alert_min_priority">{% for p in priorities %}<option {{ 'selected' if alert_cfg.alert_min_priority == p }}>{{ p }}</option>{% endfor %}</select></label>
+      <label>Prioridad para «tema compartido»
+        <select name="alert_priority_shared_topic">{% for p in priorities %}<option {{ 'selected' if alert_cfg.alert_priority_shared_topic == p }}>{{ p }}</option>{% endfor %}</select></label>
+      <label>Prioridad para «mismo hecho y proximidad temporal»
+        <select name="alert_priority_same_event">{% for p in priorities %}<option {{ 'selected' if alert_cfg.alert_priority_same_event == p }}>{{ p }}</option>{% endfor %}</select></label>
+      <label>Prioridad para «expresión distintiva o enfoque similar respaldado»
+        <select name="alert_priority_shared_expression">{% for p in priorities %}<option {{ 'selected' if alert_cfg.alert_priority_shared_expression == p }}>{{ p }}</option>{% endfor %}</select></label>
+      <label>Proximidad temporal (horas) <input type="number" min="1" max="168" name="alert_same_event_hours" value="{{ alert_cfg.alert_same_event_hours }}"></label>
+      <label>Cooldown entre avisos de una misma alerta (minutos) <input type="number" min="0" name="alert_cooldown_minutes" value="{{ alert_cfg.alert_cooldown_minutes }}"></label>
+      <label>Prioridad mínima para Telegram
+        <select name="telegram_min_priority">{% for p in priorities %}<option {{ 'selected' if alert_cfg.telegram_min_priority == p }}>{{ p }}</option>{% endfor %}</select></label>
+    </div>
+    <div class="grid-2">
+      <label>Temas silenciados (slugs, uno por línea) <textarea name="alert_silenced_topics" rows="3">{{ alert_cfg.alert_silenced_topics }}</textarea></label>
+      <label>Términos excluidos (uno por línea) <textarea name="alert_excluded_terms" rows="3">{{ alert_cfg.alert_excluded_terms }}</textarea></label>
+      <label>Secciones excluidas (separadas por coma) <textarea name="alert_excluded_sections" rows="3">{{ alert_cfg.alert_excluded_sections }}</textarea></label>
+    </div>
+    <button type="submit" class="btn">Guardar</button>
+  </form>
+  <p class="small">Telegram: {% if telegram_configured %}<strong>activado</strong>{% elif telegram_enabled %}activado pero falta token o chat_id{% else %}desactivado{% endif %} <span class="muted">(se configura con variables de entorno; ver README)</span></p>
+</section>
+
+<section class="card" id="ia">
+  <h2>Análisis con IA externa (opcional)</h2>
+  <p class="small muted">Se configura con variables de entorno (ver README). Las claves nunca se muestran en el panel.</p>
+  <dl class="meta compact-meta">
+    <dt>Estado</dt><dd>{% if ai_cfg.enabled %}<strong>activado</strong>{% else %}desactivado{% endif %}{% if ai_blocked and ai_cfg.enabled %} · <span class="error-text">{{ ai_blocked }}</span>{% endif %}</dd>
+    <dt>Proveedores (en orden)</dt><dd>{{ ai_cfg.models_label }} <div class="small muted">Si el primero falla o se queda sin cuota, se usa el siguiente.</div></dd>
+    <dt>Uso de hoy</dt><dd>{{ ai_usage.requests }} / {{ ai_cfg.daily_max_requests }} solicitudes · {{ ai_usage.tokens }} / {{ ai_cfg.daily_max_tokens }} tokens (informados por el proveedor)</dd>
+    <dt>Costo estimado</dt><dd>{% if ai_cfg.has_prices %}USD {{ ai_usage.estimated_cost_usd or 0 }}{% if ai_cfg.daily_budget_usd is not none %} de {{ ai_cfg.daily_budget_usd }} diarios{% endif %} <span class="small muted">— estimación con tarifas configuradas, no es facturación real</span>{% else %}sin tarifas configuradas (no se estima costo){% endif %}</dd>
+    <dt>Por ejecución</dt><dd>hasta {{ ai_cfg.max_per_run }} pares · entrada máx. {{ ai_cfg.max_input_chars }} caracteres</dd>
+  </dl>
+</section>
+
+<section class="card" id="cuenta">
+  <h2>Cambiar contraseña</h2>
+  {% if pw_error %}<p class="alert alert-error">{{ pw_error }}</p>{% endif %}
+  {% if pw_ok %}<p class="alert alert-ok">{{ pw_ok }}</p>{% endif %}
+  <form method="post" action="/configuracion/cuenta/clave" class="stack narrow">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Contraseña actual <input type="password" name="current" autocomplete="current-password" required></label>
+    <label>Nueva contraseña (mín. {{ min_pw }} caracteres) <input type="password" name="new" autocomplete="new-password" required minlength="{{ min_pw }}"></label>
+    <label>Repetir nueva <input type="password" name="confirm" autocomplete="new-password" required minlength="{{ min_pw }}"></label>
+    <button type="submit" class="btn">Actualizar</button>
+  </form>
+  <p class="muted small">Al cambiarla se cierran las demás sesiones abiertas.</p>
+</section>
+
+{% endblock %}

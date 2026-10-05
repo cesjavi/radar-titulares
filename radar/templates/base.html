@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false}'>
+  <title>{% block title %}Radar de Titulares{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/app.css') }}">
+  <script src="{{ url_for('static', path='js/htmx.min.js') }}" defer></script>
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
+  {% if demo_mode %}
+  <div class="demo-banner" role="status">MODO DEMO: los titulares marcados como DEMO son ficticios y no son noticias reales.</div>
+  {% endif %}
+  {% if public_view %}
+  <div class="public-banner" role="note">Vista pública de solo lectura. Las coincidencias entre medios son léxicas (palabras, frases, nombres): no prueban coordinación ni indican qué medio originó una información.</div>
+  {% endif %}
+  {% if user %}
+  <header class="topbar">
+    <a class="brand" href="/">Radar de Titulares</a>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Menú">
+    <label for="nav-toggle" class="nav-toggle-label" aria-hidden="true">☰</label>
+    <nav class="nav">
+      <a href="/" class="{{ 'active' if nav == 'resumen' }}">Resumen</a>
+      {% if not user.is_anonymous or public_alerts != 'ninguna' %}<a href="/alertas" class="{{ 'active' if nav == 'alertas' }}">Alertas</a>{% endif %}
+      <a href="/noticias" class="{{ 'active' if nav == 'noticias' }}">Noticias</a>
+      <a href="/grupos" class="{{ 'active' if nav == 'grupos' }}">Grupos</a>
+      <a href="/cronologia" class="{{ 'active' if nav == 'cronologia' }}">Cronología</a>
+      {% if not user.is_anonymous %}
+      <a href="/revision" class="{{ 'active' if nav == 'revision' }}">Revisión</a>
+      <a href="/historial" class="{{ 'active' if nav == 'historial' }}">Historial</a>
+      {% endif %}
+      <a href="/metricas" class="{{ 'active' if nav == 'metricas' }}">Métricas</a>
+      <a href="/fuentes" class="{{ 'active' if nav == 'fuentes' }}">Fuentes</a>
+      {% if not user.is_anonymous %}<a href="/ejecuciones" class="{{ 'active' if nav == 'ejecuciones' }}">Ejecuciones</a>{% endif %}
+      {% if user.is_admin %}<a href="/configuracion" class="{{ 'active' if nav == 'configuracion' }}">Configuración</a>{% endif %}
+      {% if user.is_anonymous %}
+      <a href="/login" class="nav-login">Ingresar</a>
+      {% else %}
+      <form method="post" action="/logout" class="logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="link">Salir ({{ user.username }})</button>
+      </form>
+      {% endif %}
+    </nav>
+  </header>
+  {% endif %}
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="footer">Horarios en hora de Buenos Aires (ART). Datos guardados en UTC.</footer>
+</body>
+</html>

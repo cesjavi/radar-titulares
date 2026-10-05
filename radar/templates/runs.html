@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Ejecuciones · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Ejecuciones y errores</h1>
+<p class="small muted">Últimas 24 h: {% for k, v in stats.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% else %}sin ejecuciones{% endfor %}</p>
+<form method="get" action="/ejecuciones" class="filters">
+  <label>Tipo
+    <select name="tipo">
+      <option value="">Todas</option>
+      <option value="feed" {{ 'selected' if tipo == 'feed' }}>Consulta de fuentes</option>
+      <option value="pagina" {{ 'selected' if tipo == 'pagina' }}>Lectura de páginas</option>
+      <option value="analisis" {{ 'selected' if tipo == 'analisis' }}>Análisis</option>
+    </select>
+  </label>
+  <label class="inline"><input type="checkbox" name="solo_errores" value="true" {{ 'checked' if solo_errores }}> Solo errores, bloqueos y respuestas vacías</label>
+  <button class="btn" type="submit">Filtrar</button>
+</form>
+<p class="muted small">{{ total }} ejecución(es)</p>
+{% include "partials/runs_table.html" %}
+{% if pages > 1 %}
+<nav class="pager">
+  {% if page > 1 %}<a class="btn btn-ghost" href="/ejecuciones?tipo={{ tipo }}&solo_errores={{ 'true' if solo_errores else 'false' }}&page={{ page - 1 }}">← Anterior</a>{% endif %}
+  <span class="muted">{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a class="btn btn-ghost" href="/ejecuciones?tipo={{ tipo }}&solo_errores={{ 'true' if solo_errores else 'false' }}&page={{ page + 1 }}">Siguiente →</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

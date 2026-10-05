@@ -1,0 +1,31 @@
+.venv/
+.venv*/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+data/
+.env.*
+!.env.example
+
+# Datos sensibles y archivos locales
+*.bak*
+*.db
+*.db-shm
+*.db-wal
+*.db.*
+*.sqlite*
+*.dump
+*.pem
+*.key
+*.crt
+*.p12
+*.log
+.claude/settings.local.json
+.vercel/
+.idea/
+.vscode/
+
+# Prompts usados para construir el proyecto (solo locales)
+prompt*.md
+prompt*.txt

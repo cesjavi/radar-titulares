@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Fuentes · Radar de Titulares{% endblock %}
+{% block content %}
+<div class="card-head"><h1>Estado de fuentes</h1>
+  {% if user and user.is_admin %}<a class="btn btn-small" href="/fuentes/nueva">Agregar medio</a>{% endif %}
+</div>
+<p class="muted small">Cobertura: <strong>titular</strong> = solo el título; <strong>bajada</strong> = título y copete; <strong>cuerpo</strong> = el feed publica el texto completo. Una fuente con fallas no significa que el medio no haya publicado noticias.</p>
+
+{% for b in blocks %}
+{% set m = b.media %}
+<section class="card">
+  <div class="card-head">
+    <h2>{{ m.name }}{% if m.is_demo %} <span class="badge badge-demo">DEMO</span>{% endif %}</h2>
+    <span class="badge state-{{ b.state }}">{{ labels[b.state] }}</span>
+    {% if user and user.is_admin and not m.is_demo and m.slug not in coded_slugs %}<a class="btn btn-small btn-ghost" href="/fuentes/nueva?medio={{ m.slug }}">Agregar fuente</a>{% endif %}
+  </div>
+  <dl class="meta compact-meta">
+    <dt>Último intento</dt><dd>{{ b.last_attempt | local_dt }}</dd>
+    <dt>Último éxito</dt><dd>{{ b.last_success | local_dt }}</dd>
+    <dt>Noticias registradas</dt><dd>{{ b.cov.total if b.cov else 0 }}</dd>
+    <dt>Cobertura</dt>
+    <dd>{% if b.cov and b.cov.total %}{{ b.cov.level }} · bajada {{ b.cov.pct(b.cov.with_subtitle) }}% · cuerpo {{ b.cov.pct(b.cov.with_body) }}%{% else %}—{% endif %}</dd>
+    {% if b.errors and not public_view %}
+    <dt>Error actual</dt>
+    <dd>{% for s in b.errors %}<div class="small error-text">{{ s.name }}: {{ s.last_error }}</div>{% endfor %}</dd>
+    {% endif %}
+  </dl>
+  <table class="table responsive">
+    <thead><tr><th>Subfuente</th><th>Estado</th><th>Último intento</th><th>Último éxito</th><th>Noticias</th><th>Cobertura</th><th></th></tr></thead>
+    <tbody>
+      {% for ctx in b.subs %}{% with s=ctx.s, state=ctx.state, cov=ctx.cov %}{% include "partials/subsource_row.html" %}{% endwith %}{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<p class="muted">No hay fuentes. Ejecutá <code>python -m radar init-db</code>{% if user and user.is_admin %} o <a href="/fuentes/nueva">agregá un medio</a>{% endif %}.</p>
+{% endfor %}
+
+<section class="card">
+  <h2>Historial de recolección</h2>
+  {% include "partials/runs_table.html" %}
+</section>
+{% endblock %}

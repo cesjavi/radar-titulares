@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Alertas · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Alertas</h1>
+<p class="muted small">Una alerta por grupo de coincidencias entre al menos dos medios independientes. <strong>La prioridad indica qué revisar primero: no significa falsedad ni coordinación.</strong></p>
+{% if public_view %}<p class="small muted">{% if public_alerts == 'todas' %}Se muestran alertas pendientes y revisadas: las pendientes todavía no tienen revisión humana.{% else %}Se muestran solo las alertas que ya pasaron por revisión humana.{% endif %}</p>{% else %}
+<nav class="tabs" aria-label="Estado">
+  {% for s in statuses %}<a href="/alertas?estado={{ s }}" class="{{ 'active' if estado == s }}">{{ s | capitalize }} ({{ counts.get(s, 0) }})</a>{% endfor %}
+  <a href="/alertas?estado=todas" class="{{ 'active' if estado not in statuses }}">Todas</a>
+</nav>{% endif %}
+<form method="get" action="/alertas" class="filters">
+  <input type="hidden" name="estado" value="{{ estado }}">
+  <label>Prioridad
+    <select name="prioridad">
+      <option value="">Todas</option>
+      {% for p in priorities | reverse %}<option value="{{ p }}" {{ 'selected' if prioridad == p }}>{{ p }}</option>{% endfor %}
+    </select>
+  </label>
+  <button class="btn" type="submit">Filtrar</button>
+</form>
+{% if alerts %}
+<table class="table responsive">
+  <thead><tr><th>Prioridad</th><th>Coincidencia</th><th>Medios</th><th>Última novedad</th></tr></thead>
+  <tbody>
+  {% for a, ev in alerts %}
+    <tr>
+      <td data-label="Prioridad"><span class="badge prio-{{ a.priority }}">{{ a.priority }}</span>{% if a.version > 1 %} <span class="small muted">v{{ a.version }}</span>{% endif %}</td>
+      <td data-label="Coincidencia"><a class="headline" href="/alertas/{{ a.id }}">{{ a.title }}</a>
+        <div class="small muted">{{ a.priority_reason }}</div>
+        {% if ev.frases %}<div class="small">“{{ ev.frases[:2] | join('” · “') }}”</div>{% endif %}
+      </td>
+      <td data-label="Medios" class="small">{{ ev.medios_independientes | join(', ') }}</td>
+      <td data-label="Última novedad" class="small nowrap">{{ (a.last_material_change_at or a.created_at) | local_dt }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if pages > 1 %}
+<nav class="pager">
+  {% if page > 1 %}<a class="btn btn-ghost" href="/alertas?estado={{ estado }}&prioridad={{ prioridad }}&page={{ page - 1 }}">← Anterior</a>{% endif %}
+  <span class="muted">{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a class="btn btn-ghost" href="/alertas?estado={{ estado }}&prioridad={{ prioridad }}&page={{ page + 1 }}">Siguiente →</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}<p class="muted">No hay alertas en este estado.</p>{% endif %}
+{% endblock %}

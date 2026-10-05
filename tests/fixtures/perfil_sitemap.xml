@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+<url><loc>https://www.perfil.com/noticias/politica/ejemplo-gobierno-negocia-presupuesto.phtml?utm_source=sitemap</loc><news:news><news:publication><news:name>Perfil</news:name><news:language>es</news:language></news:publication><news:publication_date>2026-10-04T15:14:25-03:00</news:publication_date><news:title><![CDATA[Ejemplo: el Gobierno negocia con gobernadores el Presupuesto]]></news:title></news:news></url>
+<url><loc>https://www.perfil.com/noticias/economia/ejemplo-solo-fecha.phtml</loc><news:news><news:publication><news:name>Perfil</news:name><news:language>es</news:language></news:publication><news:publication_date>2026-10-03</news:publication_date><news:title><![CDATA[Ejemplo: nota con fecha sin hora]]></news:title></news:news></url>
+</urlset>

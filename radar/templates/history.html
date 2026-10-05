@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Historial · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Historial de cambios</h1>
+<nav class="tabs">
+  <a href="/historial?tipo=titulares" class="{{ 'active' if tipo == 'titulares' }}">Titulares modificados por los medios</a>
+  <a href="/historial?tipo=alertas" class="{{ 'active' if tipo == 'alertas' }}">Alertas</a>
+  <a href="/historial?tipo=revisiones" class="{{ 'active' if tipo == 'revisiones' }}">Correcciones manuales</a>
+</nav>
+<p class="muted small">{{ total }} registro{{ 's' if total != 1 }}</p>
+{% if tipo == 'titulares' %}
+  {% for a in rows %}
+  <section class="card">
+    <p class="small muted">{{ a.media.name }}{% if a.author %} · Por {{ a.author }}{% endif %} · <a href="/noticias/{{ a.id }}">ficha</a></p>
+    <ol class="timeline">
+      {% for v in a.versions if v.origin == 'feed' %}
+      <li><div class="small muted">{{ v.detected_at | local_dt('%d/%m/%Y %H:%M') }}</div><div class="headline">{{ v.title }}</div>{% if v.subtitle %}<div class="small">{{ v.subtitle }}</div>{% endif %}</li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% else %}<p class="muted">Sin cambios de titular registrados.</p>{% endfor %}
+{% elif tipo == 'alertas' %}
+  <table class="table responsive">
+    <thead><tr><th>Cuándo</th><th>Alerta</th><th>Evento</th><th>Detalle</th></tr></thead>
+    <tbody>
+    {% for e, d in rows %}
+      <tr>
+        <td data-label="Cuándo" class="small nowrap">{{ e.created_at | local_dt }}</td>
+        <td data-label="Alerta"><a href="/alertas/{{ e.alert_id }}">#{{ e.alert_id }}</a> <span class="small">{{ e.alert.title[:70] if e.alert }}</span></td>
+        <td data-label="Evento">{{ e.event }}</td>
+        <td data-label="Detalle" class="small">
+          {% if e.event == 'estado' %}{{ d.de }} → {{ d.a }}{% if e.user_id %} ({{ users.get(e.user_id) }}){% endif %}
+          {% elif e.event == 'actualizada' %}{% for k, v in (d.cambios or {}).items() %}{{ k | replace('_', ' ') }}{% if not loop.last %}, {% endif %}{% endfor %}
+          {% elif e.event == 'notificacion' %}{{ d.canal }} {{ d.estado }}
+          {% else %}{{ (d.material or {}).prioridad }}{% endif %}
+        </td>
+      </tr>
+    {% else %}<tr><td class="muted">Sin eventos.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <table class="table responsive">
+    <thead><tr><th>Cuándo</th><th>Objeto</th><th>Decisión</th><th>Usuario</th><th>Nota</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td data-label="Cuándo" class="small nowrap">{{ r.created_at | local_dt }}</td>
+        <td data-label="Objeto">{% if r.target_type == 'relation' %}<a href="/relaciones/{{ r.target_id }}">relación #{{ r.target_id }}</a>{% elif r.target_type == 'group' %}<a href="/grupos/{{ r.target_id }}">grupo #{{ r.target_id }}</a>{% else %}{{ r.target_type }} #{{ r.target_id }}{% endif %}</td>
+        <td data-label="Decisión">{{ r.decision }}</td>
+        <td data-label="Usuario">{{ users.get(r.user_id, '—') }}</td>
+        <td data-label="Nota" class="small break">{{ r.note or '' }}</td>
+      </tr>
+    {% else %}<tr><td class="muted">Sin correcciones manuales.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% if pages > 1 %}
+<nav class="pager">
+  {% if page > 1 %}<a class="btn btn-ghost" href="/historial?tipo={{ tipo }}&page={{ page - 1 }}">← Anterior</a>{% endif %}
+  <span class="muted">{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a class="btn btn-ghost" href="/historial?tipo={{ tipo }}&page={{ page + 1 }}">Siguiente →</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

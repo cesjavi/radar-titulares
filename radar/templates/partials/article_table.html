@@ -1,0 +1,18 @@
+{% set qs = '&media=' ~ (filters.media | urlencode) ~ '&topic=' ~ (filters.topic | urlencode) ~ '&q=' ~ (filters.q | urlencode) ~ '&seccion=' ~ (filters.seccion | urlencode) ~ '&periodo=' ~ (filters.periodo | urlencode) ~ '&autor=' ~ (filters.autor | urlencode) ~ ('&relacionadas=true' if filters.relacionadas else '') %}
+{% if media_warning %}<p class="alert alert-warn" role="status">{{ media_warning }}</p>{% endif %}
+<p class="muted small">{{ total }} resultado{{ 's' if total != 1 }} · página {{ page }} de {{ pages }}</p>
+{% if articles %}
+<table class="table responsive">
+  <thead><tr><th>Medio</th><th>Titular</th><th>Publicada</th><th>Detectada</th></tr></thead>
+  <tbody>{% for a in articles %}{% include "partials/article_row.html" %}{% endfor %}</tbody>
+</table>
+{% else %}
+<p class="muted">No hay noticias que coincidan con los filtros.</p>
+{% endif %}
+{% if pages > 1 %}
+<nav class="pager" aria-label="Paginación">
+  {% if page > 1 %}<a class="btn btn-ghost" href="/noticias?page={{ page - 1 }}{{ qs }}" hx-get="/noticias?page={{ page - 1 }}{{ qs }}" hx-target="#results" hx-push-url="true">← Anterior</a>{% endif %}
+  <span class="muted">{{ page }} / {{ pages }}</span>
+  {% if page < pages %}<a class="btn btn-ghost" href="/noticias?page={{ page + 1 }}{{ qs }}" hx-get="/noticias?page={{ page + 1 }}{{ qs }}" hx-target="#results" hx-push-url="true">Siguiente →</a>{% endif %}
+</nav>
+{% endif %}
