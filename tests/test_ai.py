@@ -549,3 +549,99 @@ def test_min_priority_limits_candidates(db, media, story):
     alert.priority = "media"
     db.commit()
     assert select_candidates(db, 10, "media") and not select_candidates(db, 10, "alta")
+
+
+# --- análisis de un grupo completo (N notas, una sola llamada) ----------------------------------
+
+
+def group_output(arts, **over):
+    letters = "ABCDEFGH"
+    data = {
+        "mismo_hecho": "si", "tema_compartido": "renuncia en el ministerio de Trabajo",
+        "enfoque": "similar", "entidades_compartidas": ["Claudia Pérez"],
+        "notas_que_se_apartan": [],
+        "afirmaciones_principales": [
+            {"articulo": letters[i], "texto": "Renuncia", "tipo": "hecho", "fragmento": a.title[:30]}
+            for i, a in enumerate(arts)],
+        "atribuciones_de_responsabilidad": [],
+        "alcance_geografico": {"coincide": "si", "detalle": ""},
+        "periodo_de_los_datos": {"coincide": "incierto", "detalle": ""},
+        "diferencias_de_cifras": [],
+        "relacion_explicita_de_cita": {"existe": "no", "detalle": ""},
+        "fragmentos_de_evidencia": [{"articulo": letters[i], "texto": a.title[:25]}
+                                    for i, a in enumerate(arts)],
+        "discrepancias_para_revision": [], "explicacion_breve": "Todas informan la renuncia.",
+        "limitaciones": [],
+    }
+    data.update(over)
+    return data
+
+
+@pytest.fixture
+def story_group(db, story):
+    from radar.ai.service import group_articles
+    from radar.models import StoryGroup
+
+    group = db.scalar(select(StoryGroup).where(StoryGroup.status == "open"))
+    return group, group_articles(group)
+
+
+def test_group_analysis_is_one_call_with_all_notes_and_is_cached(db, story_group, ai_on):
+    from radar.ai.service import analyze_group, latest_for_group
+
+    group, arts = story_group
+    assert len(arts) == 3
+    fake = FakeProvider([group_output(arts)])
+    cfg = load_config(db)
+    an = analyze_group(db, group, cfg, fake)
+    db.commit()
+    assert an.status == "ok" and len(fake.calls) == 1
+    user = fake.calls[0]["user"]
+    assert all(f"<nota_{x}>" in user for x in "ABC") and "<nota_D>" not in user
+    assert json.loads(an.article_ids) == [a.id for a in arts]
+    assert latest_for_group(db, group.id).id == an.id
+    usage = db.scalars(select(AiUsage)).all()
+    assert usage and all(u.group_analysis_id == an.id for u in usage)
+    # Volver a pedirlo con las mismas notas no llama de nuevo.
+    again = analyze_group(db, group, cfg, fake)
+    assert again.id == an.id and len(fake.calls) == 1
+
+
+def test_group_analysis_rejects_fragments_missing_and_unknown_letters(db, story_group, ai_on):
+    from radar.ai.service import analyze_group
+
+    group, arts = story_group
+    cfg = load_config(db)
+    bad_fragment = group_output(arts, fragmentos_de_evidencia=[
+        {"articulo": "C", "texto": "texto que no figura en ninguna nota"}])
+    an = analyze_group(db, group, cfg, FakeProvider([bad_fragment]))
+    assert an.status == "invalido" and an.result is None
+    bad_letter = group_output(arts, notas_que_se_apartan=[{"articulo": "Z", "motivo": "x"}])
+    an = analyze_group(db, group, cfg, FakeProvider([bad_letter]), use_cache=False)
+    assert an.status == "invalido"
+
+
+def test_group_analysis_flags_divergent_note_for_review(db, story_group, ai_on):
+    from radar.ai.service import analyze_group
+
+    group, arts = story_group
+    data = group_output(arts, enfoque="diferente",
+                        notas_que_se_apartan=[{"articulo": "C", "motivo": "habla de otro ministerio"}])
+    an = analyze_group(db, group, load_config(db), FakeProvider([data]))
+    flags = json.loads(an.flags)
+    assert any("La nota C se aparta" in f for f in flags)
+    assert any("enfoque distinto" in f for f in flags)
+
+
+def test_group_ai_button_calls_once_and_shows_result(client, db, story_group, admin, ai_on, monkeypatch):
+    group, arts = story_group
+    fake = FakeProvider([group_output(arts)])
+    monkeypatch.setattr("radar.ai.service.make_provider", lambda cfg: fake)
+    login(client)
+    token = csrf_from(client.get(f"/grupos/{group.id}").text)
+    r = client.post(f"/grupos/{group.id}/analizar-ia", data={"csrf_token": token},
+                    follow_redirects=False)
+    assert r.status_code == 303 and len(fake.calls) == 1
+    body = client.get(f"/grupos/{group.id}").text
+    assert "Análisis con IA del grupo" in body and "Todas informan la renuncia." in body
+    assert client.post(f"/grupos/{group.id}/analizar-ia", data={}).status_code in (400, 403)

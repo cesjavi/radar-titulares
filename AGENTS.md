@@ -36,7 +36,7 @@ app.py + vercel.json   punto de entrada y configuración para Vercel (VERCEL.md)
                schema.py, service.py
   notify/      telegram.py          maintenance.py (backup/retención)       metrics.py
   web/         app.py, deps.py, routes/      templates/      static/
-alembic/versions/   0001 … 0006        deploy/   systemd, nginx, scripts
+alembic/versions/   0001 … 0007        deploy/   systemd, nginx, scripts
 tests/              fixtures/ (sintéticos)
 ```
 

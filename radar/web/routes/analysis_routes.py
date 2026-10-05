@@ -13,7 +13,14 @@ from sqlalchemy.orm import Session, selectinload
 
 from radar.ai.config import load_config as load_ai_config
 from radar.ai.providers import make_provider
-from radar.ai.service import analyze_for_admin, blocked_reason, pair_filter
+from radar.ai.service import (
+    analyze_for_admin,
+    analyze_group_for_admin,
+    blocked_reason,
+    group_articles,
+    latest_for_group,
+    pair_filter,
+)
 from radar.analysis.manual import ManualError, merge_groups, remove_member, review_relation, split_group
 from radar.analysis.relations import RULES, TYPE_LABELS
 from radar.analysis.textproc import highlight
@@ -107,12 +114,24 @@ def group_detail(request: Request, group_id: int, db: Session = Depends(get_db),
     other_groups = db.scalars(select(StoryGroup).where(StoryGroup.status == "open",
                                                        StoryGroup.id != group.id)
                               .order_by(StoryGroup.id.desc()).limit(50)).all()
+    ai_cfg = load_ai_config(db)
+    ai = latest_for_group(db, group.id)
+    ai_notes = []
+    if ai:
+        by_id = {m.article_id: m.article for m in group.members}
+        ai_notes = [(chr(65 + i), by_id.get(aid))
+                    for i, aid in enumerate(_json(ai.article_ids, []))]
     return render(request, "group_detail.html", {
         "g": group, "active": active, "excluded": excluded, "timed": timed, "untimed": untimed,
         "rels": rels, "titles": titles, "antecedents": antecedents, "reviews": reviews,
         "explanation": _json(group.explanation, {}), "common": _json(group.common_terms, {}),
         "media_names": media_names, "independent": independent, "labels": TYPE_LABELS,
         "other_groups": other_groups, "nav": "grupos", "error": request.query_params.get("error"),
+        "ai": ai, "ai_data": _json(ai.result, {}) if ai else {},
+        "ai_flags": _json(ai.flags, []) if ai else [], "ai_notes": ai_notes,
+        "ai_enabled": ai_cfg.enabled, "ai_blocked": blocked_reason(db, ai_cfg),
+        "ai_message": request.query_params.get("ia"),
+        "ai_note_count": len(group_articles(group)),
     }, user=user)
 
 
@@ -199,6 +218,15 @@ def _group_action(group_id: int, db: Session, fn):
         return RedirectResponse(f"/grupos/{group_id}?error={quote(str(exc))}", status_code=303)
     target = result.id if isinstance(result, StoryGroup) else group_id
     return RedirectResponse(f"/grupos/{target}", status_code=303)
+
+
+@router.post("/grupos/{group_id}/analizar-ia", dependencies=[Depends(verify_csrf)])
+def group_ai_analyze(group_id: int, db: Session = Depends(get_db),
+                     user: User = Depends(require_admin)):
+    """Analiza con IA todas las notas activas del grupo en una sola llamada."""
+    group = _load_group(db, group_id)
+    message = analyze_group_for_admin(db, group)
+    return RedirectResponse(f"/grupos/{group_id}?ia={quote(message)}", status_code=303)
 
 
 @router.post("/grupos/{group_id}/quitar", dependencies=[Depends(verify_csrf)])

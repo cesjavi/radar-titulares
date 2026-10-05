@@ -563,6 +563,29 @@ class AiAnalysis(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
+class AiGroupAnalysis(Base):
+    """Resultado de comparar todas las notas activas de un grupo en una sola llamada.
+
+    La letra de cada nota en el resultado (A, B, C…) es la posición en `article_ids`.
+    """
+
+    __tablename__ = "ai_group_analyses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cache_key: Mapped[str] = mapped_column(String(64), index=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("story_groups.id", ondelete="CASCADE"), index=True)
+    article_ids: Mapped[str] = mapped_column(Text)  # JSON: ids en el orden de las letras
+    provider: Mapped[str] = mapped_column(String(32))
+    model: Mapped[str] = mapped_column(String(128))
+    prompt_version: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16), index=True)  # ok | invalido | error | rechazado
+    result: Mapped[str | None] = mapped_column(Text)
+    flags: Mapped[str | None] = mapped_column(Text)
+    errors: Mapped[str | None] = mapped_column(Text)
+    input_chars: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
 class AiUsage(Base):
     """Registro de cada llamada al proveedor, con el uso que informa el proveedor."""
 
@@ -583,4 +606,6 @@ class AiUsage(Base):
     request_id: Mapped[str | None] = mapped_column(String(128))
     error: Mapped[str | None] = mapped_column(Text)
     analysis_id: Mapped[int | None] = mapped_column(ForeignKey("ai_analyses.id", ondelete="SET NULL"))
+    group_analysis_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ai_group_analyses.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

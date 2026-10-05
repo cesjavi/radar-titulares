@@ -49,6 +49,49 @@
 </section>
 
 <section class="card">
+  <h2>Análisis con IA del grupo</h2>
+  {% if ai_message %}<p class="alert alert-warn" role="status">{{ ai_message }}</p>{% endif %}
+  {% if ai %}
+  <p class="small muted">Generado por {{ ai.provider }} / {{ ai.model }} el {{ ai.created_at | local_dt }}. Compara las {{ ai_notes | length }} notas juntas. Es una lectura automática: la revisión humana manda y no determina qué afirmación es cierta.</p>
+  {% if ai_flags %}<div class="alert alert-warn"><strong>Discrepancias para revisión:</strong><ul>{% for f in ai_flags %}<li>{{ f }}</li>{% endfor %}</ul></div>{% endif %}
+  <ul class="small">{% for letter, art in ai_notes %}<li><strong>{{ letter }}</strong> · {% if art %}{{ art.media.name }}: {{ art.title }}{% else %}nota no disponible{% endif %}</li>{% endfor %}</ul>
+  <dl class="meta compact-meta">
+    <dt>¿Mismo hecho?</dt><dd>{{ ai_data.mismo_hecho }}</dd>
+    <dt>Tema compartido</dt><dd>{{ ai_data.tema_compartido }}</dd>
+    <dt>Enfoque</dt><dd>{{ ai_data.enfoque }}</dd>
+    <dt>Entidades compartidas</dt><dd>{{ ai_data.entidades_compartidas | join(', ') or '—' }}</dd>
+    <dt>Alcance geográfico</dt><dd>coincide: {{ ai_data.alcance_geografico.coincide }}{% if ai_data.alcance_geografico.detalle %} · {{ ai_data.alcance_geografico.detalle }}{% endif %}</dd>
+    <dt>Período de los datos</dt><dd>coincide: {{ ai_data.periodo_de_los_datos.coincide }}{% if ai_data.periodo_de_los_datos.detalle %} · {{ ai_data.periodo_de_los_datos.detalle }}{% endif %}</dd>
+    <dt>Cita explícita entre notas</dt><dd>{{ ai_data.relacion_explicita_de_cita.existe }}{% if ai_data.relacion_explicita_de_cita.detalle %} · {{ ai_data.relacion_explicita_de_cita.detalle }}{% endif %}</dd>
+    <dt>Explicación</dt><dd>{{ ai_data.explicacion_breve }}</dd>
+  </dl>
+  {% if ai_data.notas_que_se_apartan %}<h3>Notas que se apartan del conjunto</h3>
+  <ul>{% for x in ai_data.notas_que_se_apartan %}<li>{{ x.articulo }}: {{ x.motivo }}</li>{% endfor %}</ul>{% endif %}
+  {% if ai_data.afirmaciones_principales %}<h3>Afirmaciones principales</h3>
+  <table class="table responsive">
+    <thead><tr><th>Nota</th><th>Tipo</th><th>Afirmación</th><th>Fragmento</th></tr></thead>
+    <tbody>{% for c in ai_data.afirmaciones_principales %}<tr><td data-label="Nota">{{ c.articulo }}</td><td data-label="Tipo">{{ c.tipo | replace('_', ' ') }}</td><td data-label="Afirmación">{{ c.texto }}</td><td data-label="Fragmento" class="small">“{{ c.fragmento }}”</td></tr>{% endfor %}</tbody>
+  </table>{% endif %}
+  {% if ai_data.atribuciones_de_responsabilidad %}<h3>Atribuciones de responsabilidad</h3>
+  <ul>{% for x in ai_data.atribuciones_de_responsabilidad %}<li>{{ x.articulo }}: {{ x.responsable }} — {{ x.sobre }} <span class="small muted">(“{{ x.fragmento }}”)</span></li>{% endfor %}</ul>{% endif %}
+  {% if ai_data.diferencias_de_cifras %}<h3>Diferencias de cifras</h3>
+  <ul>{% for d in ai_data.diferencias_de_cifras %}<li>{{ d.descripcion }}: {% for c in d.cifras %}{{ c.articulo }} {{ c.cifra }}{% if not loop.last %} / {% endif %}{% endfor %}</li>{% endfor %}</ul>{% endif %}
+  <h3>Fragmentos de evidencia</h3>
+  <ul class="small">{% for f in ai_data.fragmentos_de_evidencia %}<li>{{ f.articulo }}: “{{ f.texto }}”</li>{% endfor %}</ul>
+  {% if ai_data.limitaciones %}<h3>Limitaciones</h3><ul class="small">{% for l in ai_data.limitaciones %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
+  {% else %}
+  <p class="muted">Sin análisis con IA para este grupo.{% if not ai_enabled %} La IA externa está desactivada (opcional).{% endif %}</p>
+  {% endif %}
+  {% if user and user.is_admin and ai_enabled %}
+  <form method="post" action="/grupos/{{ g.id }}/analizar-ia" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-ghost" {{ 'disabled' if ai_blocked or ai_note_count < 2 }}>{{ 'Volver a analizar' if ai else 'Analizar el grupo con IA' }}</button>
+    {% if ai_blocked %}<span class="small muted">{{ ai_blocked }}</span>{% elif ai_note_count < 2 %}<span class="small muted">Hacen falta al menos dos notas.</span>{% else %}<span class="small muted">Una sola llamada con las {{ ai_note_count }} notas (hasta 8).</span>{% endif %}
+  </form>
+  {% endif %}
+</section>
+
+<section class="card">
   <h2>Relaciones entre las notas</h2>
   {% if rels %}
   <table class="table responsive">

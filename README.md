@@ -288,7 +288,7 @@ La respuesta se **rechaza** si no es JSON válido, si no cumple el esquema o si 
 - Hasta 2 reintentos con espera (respetando `retry-after`). Un circuit breaker se abre por 30 minutos tras 3 fallos consecutivos.
 
 **En la interfaz:** cada relación indica si fue *detectada por reglas*, *analizada por IA* o *confirmada (o rechazada) por el usuario*.
-- El análisis por IA se guarda aparte (`ai_analyses`), así que reprocesar no lo borra ni toca las revisiones humanas.
+- El análisis por IA se guarda aparte (`ai_analyses`) (pares) y `ai_group_analyses` (grupo completo, una sola llamada con hasta 8 notas), así que reprocesar no lo borra ni toca las revisiones humanas.
 - Una alerta sube a prioridad alta por "enfoque similar respaldado por análisis" solo cuando la IA indica mismo hecho y enfoque similar **sin** discrepancias. Aun así se presenta como pendiente de confirmación humana.
 
 ## Configuración desde el panel (administrador)
