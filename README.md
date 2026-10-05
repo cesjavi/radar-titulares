@@ -202,7 +202,7 @@ Cada relación guarda los artículos, el tipo, los puntajes parciales, los térm
 - **Cronología:** solo se ordenan las notas con hora de publicación; las que tienen solo fecha se listan aparte. El orden observado no indica qué medio originó la información ni que uno reproduzca a otro.
 
 ### Interfaz y correcciones manuales
-- **`/grupos` y `/grupos/{id}`:** lista y detalle, con explicación, cronología, relaciones y antecedentes. Desde el detalle se puede **separar**, **quitar una nota** o **unir** con otro grupo.
+- **`/grupos` y `/grupos/{id}`:** lista y detalle, con explicación, cronología, relaciones y antecedentes. Desde el detalle se puede **separar**, **quitar una nota**, **unir** con otro grupo o **analizar el grupo completo con IA** (si está activada). La lista se puede **buscar** por palabras del título (sin distinguir mayúsculas ni tildes), **filtrar** (medios independientes, solo corregidos) y **ordenar** (primera aparición, cantidad de notas, medios independientes, última actualización).
 - **`/relaciones/{id}`:** comparación lado a lado, con las coincidencias resaltadas, fechas y precisión, enlaces originales, puntajes y reglas. Desde ahí se puede **confirmar** o **rechazar** la relación.
 - Toda corrección queda en `manual_reviews`. Las relaciones revisadas no se modifican al reprocesar, y los grupos corregidos quedan bloqueados (`locked`): el motor no cambia su composición ni vuelve a agregar las notas separadas.
 
@@ -287,8 +287,14 @@ La respuesta se **rechaza** si no es JSON válido, si no cumple el esquema o si 
 - Al alcanzar un límite se dejan de hacer llamadas. Si el proveedor informa cuota o saldo agotado, se desactivan las llamadas hasta el día siguiente.
 - Hasta 2 reintentos con espera (respetando `retry-after`). Un circuit breaker se abre por 30 minutos tras 3 fallos consecutivos.
 
+**Análisis de un grupo completo.** Además de comparar pares, el detalle de un grupo (`/grupos/{id}`) tiene el botón *Analizar el grupo con IA* (solo administradores): manda **todas las notas activas del grupo en una sola llamada** (hasta 8; si hay más, las primeras detectadas por el radar) y guarda un resultado conjunto: si tratan el mismo hecho, enfoque del conjunto, notas que se apartan, afirmaciones con fragmento citado, cifras distintas y discrepancias para revisión. Cada nota se identifica con una letra (A, B, C…). Código en `radar/ai/group.py`.
+- Misma validación que en los pares: cada fragmento citado debe existir literalmente en la nota indicada y las letras deben ser válidas; si falla, hay un único reintento con los errores a la vista.
+- Respeta los mismos límites diarios, el circuit breaker y la caché (las mismas notas con el mismo contenido no se reenvían). El máximo de caracteres de entrada se reparte entre las notas.
+- Tiene su propia versión de prompt (`GROUP_PROMPT_VERSION`, en `radar/ai/group.py`), independiente de `PROMPT_VERSION`.
+- Como todo análisis de IA, marca discrepancias para revisión humana: no dice qué afirmación es cierta ni qué medio originó algo.
+
 **En la interfaz:** cada relación indica si fue *detectada por reglas*, *analizada por IA* o *confirmada (o rechazada) por el usuario*.
-- El análisis por IA se guarda aparte (`ai_analyses`) (pares) y `ai_group_analyses` (grupo completo, una sola llamada con hasta 8 notas), así que reprocesar no lo borra ni toca las revisiones humanas.
+- El análisis por IA se guarda aparte (`ai_analyses` para pares y `ai_group_analyses` para grupos completos), así que reprocesar no lo borra ni toca las revisiones humanas.
 - Una alerta sube a prioridad alta por "enfoque similar respaldado por análisis" solo cuando la IA indica mismo hecho y enfoque similar **sin** discrepancias. Aun así se presenta como pendiente de confirmación humana.
 
 ## Configuración desde el panel (administrador)
@@ -339,9 +345,9 @@ Con `RADAR_PUBLIC_MODE=true`, cualquiera puede ver el panel **en modo de solo le
 | Sección | Contenido |
 |---|---|
 | Resumen (`/`) | Alertas pendientes por prioridad, salud de fuentes, últimas notas y ejecuciones |
-| Alertas (`/alertas`) | Lista por estado y prioridad; detalle con evidencia y revisión |
+| Alertas (`/alertas`) | Lista por estado y prioridad, con búsqueda por título, filtro por medios independientes y orden (novedad, prioridad, notas, medios); detalle con evidencia y revisión |
 | Noticias (`/noticias`) | Búsqueda y filtros por medio, tema, sección, período y "solo con coincidencias" |
-| Grupos (`/grupos`) | Grupos y comparación lado a lado (`/relaciones/{id}`) |
+| Grupos (`/grupos`) | Grupos con búsqueda, filtros y orden; detalle con análisis de IA del grupo; comparación lado a lado (`/relaciones/{id}`) |
 | Cronología (`/cronologia`) | Primera detección y primera publicación según la fuente, por grupo |
 | Revisión (`/revision`) | Cola de alertas pendientes y relaciones sin revisar |
 | Historial (`/historial`) | Titulares modificados por los medios, eventos de alertas y correcciones manuales |
@@ -388,7 +394,7 @@ python -m radar init-db        # las migraciones usan la conexión directa (sin 
 - **Tamaño:** medido en PostgreSQL local, unos 7,4 KB por nota más 7,9 MB de base vacía. Con el plan gratuito de Neon (1 GB) conviene `RADAR_RETENTION_DAYS=90`.
 - **Pruebas:** `pytest` corre sobre SQLite; con `RADAR_TEST_PG_URL=postgresql://usuario@host:puerto/base_de_pruebas` la misma suite corre sobre PostgreSQL (un esquema descartable por prueba; las específicas de SQLite se omiten y las de `pg_dump` se activan).
 
-Despliegue en Vercel con Neon: [VERCEL.md](VERCEL.md).
+Despliegue en Vercel con Neon (incluida la integración del Marketplace): [VERCEL.md](VERCEL.md). Ojo: Vercel instala las dependencias desde `pyproject.toml`, que debe repetir las de `requirements.txt`.
 
 ## Producción (VPS Linux, 2 GB de RAM)
 
