@@ -87,7 +87,7 @@
   {% for e, d in events %}
     <li>{{ e.created_at | local_dt }} · <strong>{{ e.event }}</strong>
       {% if e.event == 'estado' %}: {{ d.de }} → {{ d.a }}{% if d.nota %} ({{ d.nota }}){% endif %}
-      {% elif e.event == 'actualizada' %}: {% for k, v in (d.cambios or {}).items() %}{{ k | replace('_', ' ') }}: {{ v if v is string else v | join(', ') }}{% if not loop.last %}; {% endif %}{% endfor %}{% if d.reabierta %} · reabierta{% endif %}
+      {% elif e.event == 'actualizada' %}: {% for k, v in (d.cambios or {}).items() %}{{ k | replace('_', ' ') }}: {{ v if v is string else (v | join(', ') if v is iterable else v) }}{% if not loop.last %}; {% endif %}{% endfor %}{% if d.reabierta %} · reabierta{% endif %}
       {% elif e.event == 'notificacion' %}: {{ d.canal }} {{ d.estado }} (intento {{ d.intento }}){% if d.error %} · {{ d.error }}{% endif %}
       {% endif %}
     </li>

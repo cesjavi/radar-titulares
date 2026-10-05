@@ -72,10 +72,12 @@ def summary(request: Request, db: Session = Depends(get_db), user: User = Depend
                                    .limit(30)).all(),
                         key=lambda a: PRIORITY_ORDER.get(a.priority, 9))[:6]
     total = db.scalar(select(func.count()).select_from(visible_articles(demo).subquery())) or 0
+    last_ok = db.scalar(select(func.max(Subsource.last_success_at)))
 
     return render(request, "summary.html", {
         "per_media": per_media, "per_topic": per_topic, "latest": latest, "runs": runs,
         "failing": failing, "new_alerts": new_alerts, "total": total, "nav": "resumen",
         "health": media_health(db, demo), "labels": STATE_LABELS,
         "alert_prio": alert_prio, "top_alerts": top_alerts,
+        "last_ok": last_ok, "loaded_at": utcnow(),
     }, user=user)

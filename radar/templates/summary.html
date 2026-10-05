@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Resumen · Radar de Titulares{% endblock %}
 {% block content %}
+<div id="resumen" hx-get="/" hx-trigger="every 120s" hx-select="#resumen" hx-target="this" hx-swap="outerHTML">
 <h1>Resumen</h1>
+<p class="small muted">Última recolección exitosa: <strong>{{ last_ok | local_dt }}</strong> · pantalla actualizada a las {{ loaded_at | local_dt }} (se refresca sola cada 2 minutos) · <a href="/">Actualizar ahora</a></p>
 
 <div class="stats">
   <div class="stat"><span class="stat-value">{{ total }}</span><span class="stat-label">Noticias registradas</span></div>
@@ -74,4 +76,5 @@
   <p><a href="/fuentes">Estado de fuentes →</a></p>
 </section>
 {% endif %}
+</div>
 {% endblock %}

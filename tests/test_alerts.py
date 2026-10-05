@@ -372,3 +372,19 @@ def test_alert_settings_form(client, admin, db):
     assert cfg.min_independent_media == 3 and cfg.min_priority == "media"
     assert cfg.cooldown_minutes == 60 and cfg.priority_same_event == "media"  # valores inválidos ignorados
     assert cfg.silenced_topics == ["milei"]
+
+
+def test_alert_detail_renders_update_events_with_numeric_and_list_changes(client, admin, db, media):
+    """El historial muestra cambios de cualquier tipo (texto, lista o número, como el id del
+    análisis de IA) sin romper la página."""
+    seed_story(db, media)
+    analyze(db)
+    alert = db.scalar(select(Alert))
+    db.add(AlertEvent(alert_id=alert.id, event="actualizada", detail=json.dumps({
+        "material": True, "reabierta": True,
+        "cambios": {"analisis_ia": 3, "medios": ["Perfil", "Infobae"], "prioridad": "alta"}})))
+    db.commit()
+    login(client)
+    r = client.get(f"/alertas/{alert.id}")
+    assert r.status_code == 200
+    assert "analisis ia: 3" in r.text and "Perfil, Infobae" in r.text and "prioridad: alta" in r.text
