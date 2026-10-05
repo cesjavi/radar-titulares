@@ -1,6 +1,6 @@
 # Despliegue en Vercel con base PostgreSQL en Neon
 
-> **Estado: preparado y probado en local, NO desplegado.** No hubo cuenta de Vercel ni de Neon, así que nada se ejecutó contra los servicios reales. Lo que sí se verificó: la suite completa contra un PostgreSQL 18 real y descartable, una ingesta real de los cuatro medios sobre esa base, el arranque de `app.py` y el cron autenticado (ver [Verificaciones](#verificaciones)). Los límites de Vercel y Neon salen de su documentación oficial, consultada el 2026-10-05.
+> **Estado: desplegado una vez en Vercel con Neon (integración del Marketplace)** el 2026-10-05: `/salud` responde con `base: true`. Los puntos de abajo marcados como no verificados siguen sin comprobarse (cron, arranque en frío, tiempos). Antes se había probado solo en local. Lo que sí se verificó: la suite completa contra un PostgreSQL 18 real y descartable, una ingesta real de los cuatro medios sobre esa base, el arranque de `app.py` y el cron autenticado (ver [Verificaciones](#verificaciones)). Los límites de Vercel y Neon salen de su documentación oficial, consultada el 2026-10-05.
 
 ## Qué cambió respecto de la primera adaptación
 
@@ -33,6 +33,9 @@ Recolección ──► Vercel Cron  |  VPS / PC ──┘
 ## Paso a paso
 
 ### 1. Neon
+**Opción A: integración de Vercel (Marketplace).** En el proyecto de Vercel: **Storage → Create / Connect → Neon**. Vercel crea la base e inyecta las variables de conexión (`DATABASE_URL` / `POSTGRES_URL`) en el proyecto; la app las usa sola dentro de Vercel. Igual hay que definir a mano `RADAR_SECRET_KEY` y las demás (paso 3). Para el paso 2 (migraciones, administrador) copiá la cadena desde Settings → Environment Variables (o `vercel env pull`) y usala como `RADAR_DATABASE_URL`; para migrar tiene que ser la **directa** (sin `-pooler` en el host: se deriva sola quitándolo, o definí `RADAR_DATABASE_URL_DIRECT`). Los nombres exactos de las variables que inyecta la integración no se verificaron: si no aparecen `DATABASE_URL` ni `POSTGRES_URL`, definí `RADAR_DATABASE_URL` a mano.
+
+**Opción B: proyecto creado directamente en Neon.**
 1. Creá un proyecto en [neon.com](https://neon.com) (región cercana a la de las funciones de Vercel; por defecto Vercel usa `iad1`).
 2. En **Connect** copiá **dos** cadenas de conexión:
    - **Con pooler** (host con `-pooler`) → para la aplicación (`RADAR_DATABASE_URL`).
@@ -46,7 +49,7 @@ $env:RADAR_SECRET_KEY = "<48+ caracteres aleatorios>"
 $env:RADAR_DATABASE_URL = "<cadena CON pooler>"
 $env:RADAR_DATABASE_URL_DIRECT = "<cadena directa>"
 .\.venv-win\Scripts\pip install -r requirements.txt
-.\.venv-win\Scripts\python -m radar init-db          # migraciones 0001–0006 + medios, temas, secciones
+.\.venv-win\Scripts\python -m radar init-db          # migraciones 0001–0007 + medios, temas, secciones
 .\.venv-win\Scripts\python -m radar create-admin admin
 .\.venv-win\Scripts\python -m radar collect --force  # primera carga de datos (opcional)
 ```
@@ -70,8 +73,9 @@ Las migraciones **no** se aplican al arrancar la función: así un arranque en f
 Si Vercel inyecta `DATABASE_URL` o `POSTGRES_URL` (integración con Neon), la app las usa **solo dentro de Vercel** y si `RADAR_DATABASE_URL` no está definida. En una PC esas variables se ignoran, para no conectarse por error a la base de otro proyecto.
 
 ### 4. Desplegar
-- **Con Git:** `git init`, commit y push; importá el repositorio en Vercel. El repositorio actual **no** es un repositorio git. `.gitignore` ya excluye `.env`, `.env.*`, `.venv*/` y `data/`.
+- **Con Git:** el proyecto ya es un repositorio git; hacé push a GitHub e importá el repositorio en Vercel. `.gitignore` ya excluye `.env`, `.env.*`, `.venv*/` y `data/`.
 - **Con la CLI** (`vercel`): subí solo lo necesario; `vercel.json` excluye de la función `.venv*`, `data`, `tests`, `deploy`, `alembic`, `*.md` y `.env*`. Ante la duda, agregá un `.vercelignore`.
+- **Dependencias:** como existe `[project]` en `pyproject.toml`, Vercel instala **desde ahí** y no desde `requirements.txt` (con la lista vacía el despliegue arranca pero da 500 por `No module named 'fastapi'`). Por eso `pyproject.toml` repite las dependencias de `requirements.txt`: mantenerlas iguales.
 - Python: Vercel usa 3.12 por defecto (el proyecto exige ≥ 3.11). `requirements.txt` incluye `psycopg-binary`; existen ruedas para Linux x86_64 con Python 3.12 y 3.13.
 
 ### 5. Verificar
@@ -127,7 +131,7 @@ Límites del plan gratuito según la documentación de Neon: **1 GB por proyecto
 |---|---|---|
 | Suite completa sobre SQLite | `pytest` | 261 pasan, 4 omitidas (las que exigen Postgres) |
 | Suite completa sobre PostgreSQL 18.6 real | `RADAR_TEST_PG_URL=… pytest` (un esquema descartable por prueba) | 258 pasan, 7 omitidas (las propias de SQLite), 0 fallas |
-| Migraciones 0001–0006 | `init-db` sobre PostgreSQL | sin cambios en las migraciones |
+| Migraciones 0001–0007 | `init-db` sobre PostgreSQL | sin cambios en las migraciones |
 | Ingesta real de los 4 medios sobre PostgreSQL | `collect --force` | 17 fuentes, 856 notas, 36 relaciones, 12 grupos, 12 alertas; el segundo análisis no crea nada |
 | Pantallas con datos reales sobre PostgreSQL | visitante y administrador | 45 páginas, ningún error 5xx |
 | `app.py` | se niega sin `RADAR_SECRET_KEY` y sin PostgreSQL; arranca con PostgreSQL | comprobado |

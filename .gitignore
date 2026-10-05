@@ -29,3 +29,6 @@ data/
 # Prompts usados para construir el proyecto (solo locales)
 prompt*.md
 prompt*.txt
+
+.vercel
+.env*
