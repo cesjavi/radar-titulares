@@ -3,6 +3,60 @@
 {% block content %}
 <h1>Configuración</h1>
 
+<section class="card" id="ejecutar">
+  <h2>Ejecutar ahora</h2>
+  <p class="small muted">Lanza a mano lo mismo que hacen los comandos de la consola. Usa el mismo bloqueo que el temporizador: si hay otra ejecución en curso, esta se omite y no se pisan. El resultado queda registrado en <a href="/ejecuciones">Ejecuciones</a>.</p>
+  {% if run_error %}<p class="alert alert-error">{{ run_error }}</p>{% endif %}
+  {% include "partials/manual_run.html" %}
+  <div class="grid-2">
+    <form method="post" action="/configuracion/ejecutar" class="stack card-inner">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="tarea" value="recolectar">
+      <h3>Recolectar noticias</h3>
+      <label>Medio
+        <select name="medio"><option value="">Todos</option>{% for slug, name in run_media %}<option value="{{ slug }}">{{ name }}</option>{% endfor %}</select></label>
+      <label class="inline"><input type="checkbox" name="force"> Ignorar el intervalo mínimo de cada fuente (<code>--force</code>)</label>
+      <label class="inline"><input type="checkbox" name="no_enrich"> No leer páginas de notas (<code>--no-enrich</code>)</label>
+      <label class="inline"><input type="checkbox" name="no_analyze"> No analizar al terminar (<code>--no-analyze</code>)</label>
+      <button type="submit" class="btn">Recolectar</button>
+    </form>
+    <div class="stack">
+      <form method="post" action="/configuracion/ejecutar" class="stack card-inner">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="tarea" value="analizar">
+        <h3>Analizar</h3>
+        <p class="small muted">Relaciones, grupos, alertas y, si está activada, la IA (<code>analyze</code>).</p>
+        <button type="submit" class="btn">Analizar</button>
+      </form>
+      <form method="post" action="/configuracion/ejecutar" class="stack card-inner" onsubmit="return confirm('Cada par analizado es una llamada al proveedor de IA y puede tener costo. ¿Continuar?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="tarea" value="ia">
+        <h3>Analizar con IA</h3>
+        <label>Máximo de pares <input type="number" name="limit" min="1" max="{{ run_ai_max }}" value="1"></label>
+        <p class="small muted">Respeta los límites diarios y la caché (<code>ai-analyze --limit N</code>).</p>
+        <button type="submit" class="btn">Analizar con IA</button>
+      </form>
+      <form method="post" action="/configuracion/ejecutar" class="stack card-inner">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="tarea" value="probar">
+        <h3>Verificar fuentes</h3>
+        <label>Medio
+          <select name="medio"><option value="">Todos</option>{% for slug, name in run_media %}<option value="{{ slug }}">{{ name }}</option>{% endfor %}</select></label>
+        <p class="small muted">Descarga cada fuente y cuenta las notas, sin guardar nada (<code>probe</code>).</p>
+        <button type="submit" class="btn">Verificar</button>
+      </form>
+      <form method="post" action="/configuracion/ejecutar" class="stack card-inner">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="tarea" value="mantenimiento">
+        <h3>Retención</h3>
+        <label class="inline"><input type="checkbox" name="dry_run" checked> Solo simular (<code>purge --dry-run</code>)</label>
+        <p class="small muted">Sin la casilla, borra notas y registros más viejos que la retención configurada; no toca lo que tiene decisión humana.</p>
+        <button type="submit" class="btn">Aplicar</button>
+      </form>
+    </div>
+  </div>
+</section>
+
 <section class="card" id="temas">
   <h2>Temas de seguimiento</h2>
   <p class="muted small">Una palabra o frase por línea. La coincidencia ignora mayúsculas y tildes y se busca en titular, bajada y palabras clave de la fuente.</p>

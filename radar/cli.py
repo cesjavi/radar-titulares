@@ -306,29 +306,23 @@ def cmd_notify(_args) -> int:
 
 
 def cmd_probe(args) -> int:
-    """Verifica las fuentes declaradas por cada adaptador sin guardar nada."""
-    from radar.collector.adapters import ADAPTERS
-    from radar.collector.parsers import FeedParseError
-    from radar.net import BlockedError, FetchError, SafeFetcher, UnsafeURLError
+    """Verifica las fuentes de cada medio (con adaptador propio o agregado en el panel)."""
+    from radar.probe import probe_media
 
-    settings = get_settings()
-    adapters = [ADAPTERS[args.media]] if args.media else list(ADAPTERS.values())
-    with SafeFetcher(settings.user_agent, timeout=settings.http_timeout, retries=0) as fetcher:
-        for adapter in adapters:
-            fetcher.rate.set_interval(adapter.base_url.split("/")[2], adapter.request_interval)
-            print(f"== {adapter.name}")
-            for ep in adapter.endpoints:
-                try:
-                    resp = fetcher.get(ep.url, adapter.allowed_domains)
-                    items = adapter.parse(resp.content, ep.kind, resp.url,
-                                          resp.headers.get("content-type"), ep.max_items)
-                    sample = items[0].title[:70] if items else "-"
-                    print(f"  [{'OK' if items else 'VACÍA'}] {ep.kind:13} {ep.url}\n"
-                          f"        HTTP {resp.status_code}, {len(resp.content)} bytes, "
-                          f"{len(items)} notas; ej.: {sample}")
-                except (BlockedError, FetchError, UnsafeURLError, FeedParseError) as exc:
-                    print(f"  [FALLA] {ep.kind:13} {ep.url}\n"
-                          f"        {type(exc).__name__}: {exc}")
+    rows = probe_media(args.media)
+    if not rows:
+        print("No hay fuentes para verificar." + (f" Medio desconocido: {args.media}." if args.media else ""))
+        return 2 if args.media else 0
+    current = None
+    for r in rows:
+        if r["medio"] != current:
+            current = r["medio"]
+            print(f"== {current}")
+        if r["estado"] == "falla":
+            print(f"  [FALLA] {r['tipo']:13} {r['url']}\n        {r['error']}")
+        else:
+            print(f"  [{'OK' if r['estado'] == 'ok' else 'VACÍA'}] {r['tipo']:13} {r['url']}\n"
+                  f"        HTTP {r['http']}, {r['bytes']} bytes, {r['notas']} notas; ej.: {r['ejemplo']}")
     return 0
 
 
@@ -412,7 +406,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_notify)
 
     p = sub.add_parser("probe", help="Verificar las fuentes de cada medio sin guardar datos")
-    p.add_argument("--media", choices=sorted(ADAPTERS))
+    p.add_argument("--media", help="Verificar solo este medio (slug)")
     p.set_defaults(func=cmd_probe)
 
     sub.add_parser("demo-load", help="Cargar datos ficticios (requiere RADAR_DEMO_MODE=true)")

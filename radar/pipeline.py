@@ -19,11 +19,11 @@ log = logging.getLogger("radar.pipeline")
 TASKS = ("todo", "recolectar", "analizar", "mantenimiento")
 
 
-def collect_phase(media: str | None = None, force: bool = False) -> dict:
+def collect_phase(media: str | None = None, force: bool = False, enrich: bool = True) -> dict:
     if media is not None:
         check_media_slug(media)
     try:
-        summary = run_collection(only_media=media, force=force)
+        summary = run_collection(only_media=media, force=force, enrich_pages=enrich)
     except CollectorBusy:
         return {"estado": "omitido", "motivo": "ya hay una ejecución en curso"}
     with session_scope() as db:
@@ -56,7 +56,22 @@ def analysis_phase() -> dict:
     }
 
 
-def maintenance_phase() -> dict:
+def ai_phase(limit: int | None = None) -> dict:
+    """Equivale a `python -m radar ai-analyze`. Cada par analizado es una llamada al proveedor."""
+    from radar.ai.service import run_ai
+
+    try:
+        with job_lock(name="ia"):
+            with session_scope() as db:
+                s = run_ai(db, limit=limit)
+    except CollectorBusy:
+        return {"estado": "omitido", "motivo": "ya hay una ejecución en curso"}
+    return {"estado": "ok", "candidatos": s.candidates, "en_cache": s.cached, "llamadas": s.calls,
+            "validos": s.ok, "invalidos": s.invalid, "errores": s.errors,
+            "motivo": s.stopped or s.reason}
+
+
+def maintenance_phase(dry_run: bool = False) -> dict:
     """Retención del histórico (equivale a `python -m radar purge`). No hace backups: eso
     necesita pg_dump y se ejecuta desde una máquina propia (ver VERCEL.md)."""
     from radar.config import get_settings
@@ -65,10 +80,13 @@ def maintenance_phase() -> dict:
     try:
         with job_lock(name="mantenimiento"):
             with session_scope() as db:
-                r = purge(db, get_settings())
+                r = purge(db, get_settings(), dry_run=dry_run)
+                if dry_run:
+                    db.rollback()
     except CollectorBusy:
         return {"estado": "omitido", "motivo": "ya hay una ejecución en curso"}
-    return {"estado": "ok", "notas_borradas": r.articles, "grupos_vacios_borrados": r.groups,
+    return {"estado": "simulación (no se borró nada)" if dry_run else "ok",
+            "notas_borradas": r.articles, "grupos_vacios_borrados": r.groups,
             "ejecuciones_borradas": r.runs, "registros_ia_borrados": r.ai_usage,
             "avisos_borrados": r.notifications}
 

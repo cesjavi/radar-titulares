@@ -9,10 +9,10 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from radar import runtime
+from radar import manual_run, runtime
 from radar.alerts.config import DEFAULTS as ALERT_DEFAULTS
 from radar.alerts.config import PRIORITIES, raw_settings, save_settings
-from radar.models import AppSetting, Topic, User
+from radar.models import AppSetting, Media, Topic, User
 from radar.notify import telegram
 from radar.ai.config import (
     BOOL_FIELDS,
@@ -59,7 +59,11 @@ def _page(request, db, user, status_code: int = 200, **extra):
            "ai_blocked": ai_blocked_reason(db, ai_cfg),
            "ai_providers": SUPPORTED_PROVIDERS, "ai_limits": INT_LIMITS,
            "ai_saved": stored_overrides(db), "rt": runtime.effective(db),
-           "public_alert_choices": runtime.PUBLIC_ALERT_CHOICES, "rt_limits": runtime.SPECS}
+           "public_alert_choices": runtime.PUBLIC_ALERT_CHOICES, "rt_limits": runtime.SPECS,
+           "run_tasks": manual_run.TASKS, "run_state": manual_run.last_state(db),
+           "run_media": [(m.slug, m.name) for m in db.scalars(
+               select(Media).where(Media.is_demo.is_(False)).order_by(Media.name))],
+           "run_ai_max": manual_run.AI_LIMIT_MAX}
     ctx.update(extra)
     return render(request, "settings.html", ctx, status_code=status_code, user=user)
 
@@ -203,6 +207,27 @@ async def telegram_settings_update(request: Request, db: Session = Depends(get_d
                                    user: User = Depends(require_admin)):
     form = await request.form()
     return _save_runtime(request, db, user, form, {"telegram_enabled": "Telegram"}, "telegram")
+
+
+@router.post("/ejecutar", dependencies=[Depends(verify_csrf)])
+async def run_now(request: Request, db: Session = Depends(get_db),
+                  user: User = Depends(require_admin)):
+    """Ejecuta a mano una tarea (equivale a un comando de la CLI)."""
+    form = await request.form()
+    try:
+        opts = manual_run.parse_options(form)
+        db.commit()  # no dejar una transacción abierta mientras corre la tarea
+        manual_run.start(opts, user.username)
+    except manual_run.RunError as exc:
+        return _page(request, db, user, 400, run_error=str(exc))
+    return RedirectResponse("/configuracion#ejecutar", status_code=303)
+
+
+@router.get("/ejecutar/estado")
+def run_state(request: Request, db: Session = Depends(get_db),
+              user: User = Depends(require_admin)):
+    return render(request, "partials/manual_run.html",
+                  {"run_state": manual_run.last_state(db)}, user=user)
 
 
 @router.post("/cuenta/clave", dependencies=[Depends(verify_csrf)])

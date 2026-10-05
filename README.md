@@ -303,7 +303,20 @@ La respuesta se **rechaza** si no es JSON válido, si no cumple el esquema o si 
 | Telegram | Activar los avisos | Próximo ciclo |
 | Recolección y retención | Páginas a leer por medio y ciclo, retención de notas y de ejecuciones/avisos | Próxima recolección o mantenimiento |
 | Vista pública | Activar, alertas visibles (`revisadas`, `todas`, `ninguna`) y límite por IP | En unos segundos |
+| Ejecutar ahora | Recolectar, analizar, IA, verificar fuentes y retención, con sus opciones | Al momento |
 | Fuentes (`/fuentes`) | Pausar, intervalo mínimo por fuente (5 a 1440 minutos) y alta de medios | Próxima recolección |
+
+**Ejecutar ahora.** En la misma pantalla, un administrador puede lanzar a mano lo que hacen los comandos de la consola:
+
+| Tarea | Equivale a | Opciones |
+|---|---|---|
+| Recolectar noticias | `collect` | medio, ignorar el intervalo (`--force`), no leer páginas (`--no-enrich`), no analizar al terminar (`--no-analyze`) |
+| Analizar | `analyze` | — |
+| Analizar con IA | `ai-analyze --limit N` | máximo de pares (1 a 50); pide confirmación porque cada par es una llamada paga |
+| Verificar fuentes | `probe` | medio; no guarda nada |
+| Retención | `purge` / `purge --dry-run` | simulación (marcada por defecto) |
+
+Usan las mismas fases y el mismo bloqueo que el temporizador, así que no se pisan con él ni entre sí (solo una ejecución manual a la vez). En un servidor propio corren en segundo plano y la pantalla se actualiza sola; en Vercel corren dentro de la solicitud. El último resultado queda a la vista, y las consultas a las fuentes se registran en **Ejecuciones**.
 
 Cada formulario exige CSRF y rol administrador y valida los rangos. Activar la vista pública hace visible el panel de lectura a cualquier persona: conviene revisar antes qué alertas se muestran.
 

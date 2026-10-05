@@ -1,0 +1,28 @@
+<div id="manual-run" {% if run_state and run_state.estado == 'en_curso' %}hx-get="/configuracion/ejecutar/estado" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+{% if run_state %}
+  <div class="alert {{ 'alert-error' if run_state.estado in ('error', 'abandonada') else 'alert-ok' if run_state.estado == 'ok' else 'alert-warn' }}" role="status">
+    <strong>{% if run_state.estado == 'en_curso' %}En curso…{% elif run_state.estado == 'ok' %}Terminó{% elif run_state.estado == 'abandonada' %}Quedó sin terminar{% else %}Falló{% endif %}</strong>
+    · {{ run_state.descripcion }}
+    <span class="small muted">· pedida por {{ run_state.usuario }}{% if run_state.inicio %} · {{ run_state.inicio | local_dt }}{% endif %}</span>
+    {% if run_state.error %}<div class="small error-text">{{ run_state.error }}</div>{% endif %}
+    {% if run_state.resultado %}
+      {% for fase, datos in run_state.resultado.items() %}
+        {% if fase == 'fuentes' %}
+          <table class="table small">
+            <thead><tr><th>Medio</th><th>Fuente</th><th>Estado</th><th>Notas</th></tr></thead>
+            <tbody>{% for f in datos %}<tr><td>{{ f.medio }}</td><td class="break">{{ f.tipo }} · {{ f.url }}</td>
+              <td>{{ {'ok': 'OK', 'vacia': 'Vacía', 'falla': 'Falla'}[f.estado] }}{% if f.error %}<div class="error-text">{{ f.error }}</div>{% endif %}</td>
+              <td class="num">{{ f.notas if f.notas is defined else '—' }}</td></tr>{% endfor %}</tbody>
+          </table>
+        {% elif fase == 'resumen' %}
+        {% else %}
+          <div class="small"><strong>{{ fase }}:</strong>
+            {% for k, v in datos.items() %}{% if v is not none and v != '' %}{{ k | replace('_', ' ') }} {{ v }}{% if not loop.last %} · {% endif %}{% endif %}{% endfor %}</div>
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+  </div>
+{% else %}
+  <p class="small muted">Todavía no se hizo ninguna ejecución manual.</p>
+{% endif %}
+</div>

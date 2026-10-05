@@ -46,6 +46,8 @@ Medios (`M`): `perfil`, `eldestape`, `infobae`, `pagina12` y los que se agreguen
 | `restore ARCHIVO --yes` | SQLite: restaura con los servicios detenidos (la base actual se conserva renombrada). PostgreSQL: no se automatiza; informa el comando y la opción de Neon |
 | `purge [--dry-run]` | Aplica la retención; conserva lo que tiene decisiones humanas |
 
+Todo esto también se puede lanzar desde **Configuración → Ejecutar ahora** (solo administradores), con las mismas opciones.
+
 ### Aplicación web
 ```powershell
 .\.venv-win\Scripts\uvicorn radar.web.app:create_app --factory --port 8000
