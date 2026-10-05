@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import math
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
@@ -25,6 +25,7 @@ from radar.analysis.manual import ManualError, merge_groups, remove_member, revi
 from radar.analysis.relations import RULES, TYPE_LABELS
 from radar.analysis.textproc import highlight
 from radar.config import get_settings
+from radar.queries import title_condition
 from radar.models import (
     AiAnalysis,
     Article,
@@ -38,6 +39,13 @@ from radar.web.deps import demo_visible, get_db, render, require_admin, verify_c
 
 router = APIRouter()
 PER_PAGE = 30
+GROUP_ORDERS = {
+    "recientes": "Primera aparición (más reciente)",
+    "antiguos": "Primera aparición (más antigua)",
+    "notas": "Más notas",
+    "medios": "Más medios independientes",
+    "actualizados": "Última actualización",
+}
 
 
 def _json(value: str | None, default):
@@ -63,20 +71,43 @@ def _visible(article: Article, request: Request) -> bool:
 
 
 @router.get("/grupos")
-def group_list(request: Request, page: int = Query(1, ge=1, le=10000),
+def group_list(request: Request, q: str = Query("", max_length=100),
+               min_medios: int = Query(0, ge=0, le=20), corregidos: bool = Query(False),
+               orden: str = Query("recientes", max_length=16),
+               page: int = Query(1, ge=1, le=10000),
                db: Session = Depends(get_db), user: User = Depends(viewer)):
     stmt = select(StoryGroup).where(StoryGroup.status == "open", StoryGroup.article_count >= 1)
+    q = q.strip()
+    cond = title_condition(StoryGroup.title, q) if q else None
+    if cond is not None:
+        stmt = stmt.where(cond)
+    if min_medios:
+        stmt = stmt.where(StoryGroup.independent_media_count >= min_medios)
+    if corregidos:
+        stmt = stmt.where(StoryGroup.locked.is_(True))
+    if orden not in GROUP_ORDERS:
+        orden = "recientes"
+    order = {"recientes": [StoryGroup.first_seen_at.desc().nulls_last()],
+             "antiguos": [StoryGroup.first_seen_at.asc().nulls_last()],
+             "notas": [StoryGroup.article_count.desc()],
+             "medios": [StoryGroup.independent_media_count.desc(), StoryGroup.article_count.desc()],
+             "actualizados": [StoryGroup.updated_at.desc()]}[orden]
     if not demo_visible(request):
         demo_groups = (select(StoryGroupMember.group_id).join(Article)
                        .where(Article.is_demo.is_(True)))
         stmt = stmt.where(StoryGroup.id.not_in(demo_groups))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     pages = max(1, math.ceil(total / PER_PAGE))
-    groups = db.scalars(stmt.order_by(StoryGroup.first_seen_at.desc().nulls_last(), StoryGroup.id.desc())
+    groups = db.scalars(stmt.order_by(*order, StoryGroup.id.desc())
                         .offset((min(page, pages) - 1) * PER_PAGE).limit(PER_PAGE)).all()
     rows = [(g, _json(g.common_terms, {})) for g in groups]
     return render(request, "groups.html", {"rows": rows, "page": min(page, pages), "pages": pages,
-                                           "total": total, "nav": "grupos"}, user=user)
+                                           "total": total, "nav": "grupos",
+                                           "q": q, "min_medios": min_medios, "corregidos": corregidos,
+                                           "orden": orden, "orders": GROUP_ORDERS,
+                                           "qs": urlencode({"q": q, "min_medios": min_medios or "",
+                                                            "corregidos": "true" if corregidos else "",
+                                                            "orden": orden})}, user=user)
 
 
 @router.get("/grupos/{group_id}")

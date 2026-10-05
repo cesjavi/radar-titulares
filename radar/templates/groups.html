@@ -4,6 +4,22 @@
 <h1>Grupos de coincidencias</h1>
 <p class="muted small">Notas de distintos medios unidas por coincidencias <strong>léxicas</strong> (titulares, expresiones, entidades). Un grupo no prueba coordinación ni indica qué medio originó la información. «Medios independientes» no cuenta republicaciones de agencias o terceros; Canal E y Revista Noticias cuentan como Perfil.</p>
 <p class="muted small">{{ total }} grupo{{ 's' if total != 1 }} · página {{ page }} de {{ pages }}</p>
+<form method="get" action="/grupos" class="filters">
+  <label>Buscar <input type="search" name="q" value="{{ q }}" maxlength="100" placeholder="palabra del título"></label>
+  <label>Medios independientes
+    <select name="min_medios">
+      {% for n in (0, 2, 3, 4) %}<option value="{{ n }}" {{ 'selected' if min_medios == n }}>{{ 'Cualquiera' if n == 0 else n ~ ' o más' }}</option>{% endfor %}
+    </select>
+  </label>
+  <label class="inline"><input type="checkbox" name="corregidos" value="true" {{ 'checked' if corregidos }}> Solo corregidos</label>
+  <label>Ordenar por
+    <select name="orden">
+      {% for k, label in orders.items() %}<option value="{{ k }}" {{ 'selected' if orden == k }}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <button class="btn" type="submit">Aplicar</button>
+  {% if q or min_medios or corregidos or orden != 'recientes' %}<a class="btn btn-ghost" href="/grupos">Limpiar</a>{% endif %}
+</form>
 {% if rows %}
 <table class="table responsive">
   <thead><tr><th>Grupo</th><th>Notas</th><th>Medios</th><th>Independientes</th><th>Primera aparición observada</th></tr></thead>
@@ -25,12 +41,13 @@
 </table>
 {% if pages > 1 %}
 <nav class="pager">
-  {% if page > 1 %}<a class="btn btn-ghost" href="/grupos?page={{ page - 1 }}">← Anterior</a>{% endif %}
+  {% if page > 1 %}<a class="btn btn-ghost" href="/grupos?{{ qs }}&page={{ page - 1 }}">← Anterior</a>{% endif %}
   <span class="muted">{{ page }} / {{ pages }}</span>
-  {% if page < pages %}<a class="btn btn-ghost" href="/grupos?page={{ page + 1 }}">Siguiente →</a>{% endif %}
+  {% if page < pages %}<a class="btn btn-ghost" href="/grupos?{{ qs }}&page={{ page + 1 }}">Siguiente →</a>{% endif %}
 </nav>
 {% endif %}
 {% else %}
-<p class="muted">Todavía no hay grupos. Se generan con <code>python -m radar analyze</code> (también corre al final de cada recolección).</p>
+{% if q or min_medios or corregidos %}<p class="muted">Ningún grupo coincide con los filtros.</p>
+{% else %}<p class="muted">Todavía no hay grupos. Se generan con <code>python -m radar analyze</code> (también corre al final de cada recolección).</p>{% endif %}
 {% endif %}
 {% endblock %}

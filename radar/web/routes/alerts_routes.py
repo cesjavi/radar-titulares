@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import json
 import math
+from urllib.parse import urlencode
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from radar import runtime
@@ -17,6 +18,7 @@ from radar.alerts.engine import STATUSES, set_status
 from radar.analysis.relations import TYPE_LABELS
 from radar.config import get_settings
 from radar.metrics import sequence_metrics
+from radar.queries import title_condition
 from radar.models import (
     Alert,
     AlertEvent,
@@ -45,6 +47,13 @@ from radar.web.deps import (
 router = APIRouter()
 PER_PAGE = 30
 PRIORITY_ORDER = {"alta": 0, "media": 1, "baja": 2}
+ALERT_ORDERS = {
+    "novedad": "Última novedad (más reciente)",
+    "novedad_asc": "Última novedad (más antigua)",
+    "prioridad": "Prioridad (alta primero)",
+    "notas": "Más notas",
+    "medios": "Más medios independientes",
+}
 
 
 def _json(value, default):
@@ -82,7 +91,9 @@ def _pages(total: int, page: int) -> tuple[int, int]:
 
 @router.get("/alertas")
 def alert_list(request: Request, estado: str = Query("pendiente", max_length=16),
-               prioridad: str = Query("", max_length=8), page: int = Query(1, ge=1, le=10000),
+               prioridad: str = Query("", max_length=8), q: str = Query("", max_length=100),
+               min_medios: int = Query(0, ge=0, le=20), orden: str = Query("", max_length=16),
+               page: int = Query(1, ge=1, le=10000),
                db: Session = Depends(get_db), user: User = Depends(viewer)):
     if is_public(request):
         estado = "todas"
@@ -91,16 +102,34 @@ def alert_list(request: Request, estado: str = Query("pendiente", max_length=16)
         stmt = stmt.where(Alert.status == estado)
     if prioridad in PRIORITIES:
         stmt = stmt.where(Alert.priority == prioridad)
+    q = q.strip()
+    cond = title_condition(Alert.title, q) if q else None
+    if cond is not None:
+        stmt = stmt.where(cond)
+    if min_medios:
+        stmt = stmt.where(Alert.independent_media_count >= min_medios)
+    # Las pendientes se ordenan por prioridad salvo que se pida otro orden.
+    if orden not in ALERT_ORDERS:
+        orden = "prioridad" if estado == "pendiente" else "novedad"
+    news = func.coalesce(Alert.last_material_change_at, Alert.created_at)
+    prio = case(*[(Alert.priority == p, r) for p, r in PRIORITY_ORDER.items()], else_=9)
+    order = {"novedad": [news.desc()], "novedad_asc": [news.asc()],
+             "prioridad": [prio, news.desc()],
+             "notas": [Alert.article_count.desc(), news.desc()],
+             "medios": [Alert.independent_media_count.desc(), news.desc()]}[orden]
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     page, pages = _pages(total, page)
-    order = [func.coalesce(Alert.last_material_change_at, Alert.created_at).desc()]
-    alerts = db.scalars(stmt.order_by(*order).offset((page - 1) * PER_PAGE).limit(PER_PAGE)).all()
-    alerts = sorted(alerts, key=lambda a: PRIORITY_ORDER.get(a.priority, 9)) if estado == "pendiente" else alerts
+    alerts = db.scalars(stmt.order_by(*order, Alert.id.desc())
+                        .offset((page - 1) * PER_PAGE).limit(PER_PAGE)).all()
     counts = dict(db.execute(_alert_scope(select(Alert.status, func.count()), request)
                              .group_by(Alert.status)).all())
     return render(request, "alerts.html", {
         "alerts": [(a, _json(a.evidence, {})) for a in alerts], "estado": estado,
-        "prioridad": prioridad, "page": page, "pages": pages, "total": total, "counts": counts,
+        "prioridad": prioridad, "q": q, "min_medios": min_medios, "orden": orden,
+        "orders": ALERT_ORDERS,
+        "qs": urlencode({"estado": estado, "prioridad": prioridad, "q": q,
+                         "min_medios": min_medios or "", "orden": orden}),
+        "page": page, "pages": pages, "total": total, "counts": counts,
         "statuses": STATUSES, "priorities": PRIORITIES, "nav": "alertas",
     }, user=user)
 

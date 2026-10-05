@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Select, and_, not_, or_, select
+from sqlalchemy import Select, and_, func, not_, or_, select
 
 from radar.models import Article, Topic
 from radar.text import normalize_for_search
@@ -11,6 +11,28 @@ from radar.text import normalize_for_search
 def _like(term: str):
     escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return Article.search_text.like(f"%{escaped}%", escape="\\")
+
+
+# Solo las letras del español: más anidamiento de replace() desborda el parser de SQLite.
+_FOLD = {c: b for b, chars in (("a", "á"), ("e", "é"), ("i", "í"), ("o", "ó"), ("u", "úü"), ("n", "ñ"))
+         for c in chars + chars.upper()}
+
+
+def _folded(column):
+    """La columna sin tildes y en minúsculas, igual en SQLite y PostgreSQL (lower() de
+    SQLite solo conoce ASCII: por eso se reemplazan también las mayúsculas acentuadas)."""
+    expr = column
+    for src, dst in _FOLD.items():
+        expr = func.replace(expr, src, dst)
+    return func.lower(expr)
+
+
+def title_condition(column, q: str):
+    """Todas las palabras de `q` en el texto de la columna, sin distinguir mayúsculas ni tildes."""
+    terms = [t for t in normalize_for_search(q).split(" ") if t][:8]
+    escaped = [t.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") for t in terms]
+    folded = _folded(column)
+    return and_(*[folded.like(f"%{t}%", escape="\\") for t in escaped]) if terms else None
 
 
 def topic_condition(topic: Topic):

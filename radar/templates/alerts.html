@@ -10,17 +10,29 @@
 </nav>{% endif %}
 <form method="get" action="/alertas" class="filters">
   <input type="hidden" name="estado" value="{{ estado }}">
+  <label>Buscar <input type="search" name="q" value="{{ q }}" maxlength="100" placeholder="palabra del título"></label>
   <label>Prioridad
     <select name="prioridad">
       <option value="">Todas</option>
       {% for p in priorities | reverse %}<option value="{{ p }}" {{ 'selected' if prioridad == p }}>{{ p }}</option>{% endfor %}
     </select>
   </label>
-  <button class="btn" type="submit">Filtrar</button>
+  <label>Medios independientes
+    <select name="min_medios">
+      {% for n in (0, 2, 3, 4) %}<option value="{{ n }}" {{ 'selected' if min_medios == n }}>{{ 'Cualquiera' if n == 0 else n ~ ' o más' }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>Ordenar por
+    <select name="orden">
+      {% for k, label in orders.items() %}<option value="{{ k }}" {{ 'selected' if orden == k }}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <button class="btn" type="submit">Aplicar</button>
+  {% if q or prioridad or min_medios %}<a class="btn btn-ghost" href="/alertas?estado={{ estado }}">Limpiar</a>{% endif %}
 </form>
 {% if alerts %}
 <table class="table responsive">
-  <thead><tr><th>Prioridad</th><th>Coincidencia</th><th>Medios</th><th>Última novedad</th></tr></thead>
+  <thead><tr><th>Prioridad</th><th>Coincidencia</th><th>Medios</th><th>Notas</th><th>Última novedad</th></tr></thead>
   <tbody>
   {% for a, ev in alerts %}
     <tr>
@@ -30,6 +42,7 @@
         {% if ev.frases %}<div class="small">“{{ ev.frases[:2] | join('” · “') }}”</div>{% endif %}
       </td>
       <td data-label="Medios" class="small">{{ ev.medios_independientes | join(', ') }}</td>
+      <td data-label="Notas" class="num">{{ a.article_count }}</td>
       <td data-label="Última novedad" class="small nowrap">{{ (a.last_material_change_at or a.created_at) | local_dt }}</td>
     </tr>
   {% endfor %}
@@ -37,10 +50,10 @@
 </table>
 {% if pages > 1 %}
 <nav class="pager">
-  {% if page > 1 %}<a class="btn btn-ghost" href="/alertas?estado={{ estado }}&prioridad={{ prioridad }}&page={{ page - 1 }}">← Anterior</a>{% endif %}
+  {% if page > 1 %}<a class="btn btn-ghost" href="/alertas?{{ qs }}&page={{ page - 1 }}">← Anterior</a>{% endif %}
   <span class="muted">{{ page }} / {{ pages }}</span>
-  {% if page < pages %}<a class="btn btn-ghost" href="/alertas?estado={{ estado }}&prioridad={{ prioridad }}&page={{ page + 1 }}">Siguiente →</a>{% endif %}
+  {% if page < pages %}<a class="btn btn-ghost" href="/alertas?{{ qs }}&page={{ page + 1 }}">Siguiente →</a>{% endif %}
 </nav>
 {% endif %}
-{% else %}<p class="muted">No hay alertas en este estado.</p>{% endif %}
+{% else %}<p class="muted">No hay alertas {% if q or prioridad or min_medios %}con esos filtros{% else %}en este estado{% endif %}.</p>{% endif %}
 {% endblock %}
