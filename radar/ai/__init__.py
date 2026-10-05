@@ -5,4 +5,4 @@ motor léxico; el contenido periodístico se trata como entrada no confiable y e
 se valida antes de guardarse. La revisión humana sigue siendo la decisión final.
 """
 
-PROMPT_VERSION = "comparacion-1.0"
+PROMPT_VERSION = "comparacion-1.1"

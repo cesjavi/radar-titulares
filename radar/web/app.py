@@ -8,12 +8,13 @@ from collections import defaultdict, deque
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from radar import __version__
+from radar import runtime
 from radar.config import BASE_DIR, get_settings
 from radar.web.deps import LoginRequired, client_ip, render
 from radar.web.routes import (
@@ -61,9 +62,11 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def public_rate_limit(request: Request, call_next):
         """Límite por IP para visitantes anónimos de la vista pública (protege el VPS)."""
-        s = get_settings()
-        if (s.public_mode and s.public_rate_limit and not request.url.path.startswith("/static/")
-                and not request.session.get("uid")):
+        if request.url.path.startswith("/static/") or request.session.get("uid"):
+            return await call_next(request)
+        rt = runtime.effective()
+        limit = rt["public_rate_limit"]
+        if rt["public_mode"] and limit:
             ip = client_ip(request)
             now = time.monotonic()
             with hits_lock:
@@ -72,7 +75,7 @@ def create_app() -> FastAPI:
                 q = hits[ip]
                 while q and now - q[0] > 60:
                     q.popleft()
-                if len(q) >= s.public_rate_limit:
+                if len(q) >= limit:
                     return Response("Demasiadas solicitudes. Probá de nuevo en un minuto.",
                                     status_code=429, headers={"Retry-After": "60"},
                                     media_type="text/plain; charset=utf-8")
@@ -132,6 +135,10 @@ def create_app() -> FastAPI:
         status = "ok" if minutes is not None and minutes <= 30 else "degradado"
         return {"estado": status, "base": True, "ultima_recoleccion_min": minutes,
                 "version": __version__}
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():
+        return FileResponse(BASE_DIR / "radar" / "static" / "favicon.svg", media_type="image/svg+xml")
 
     for module in (auth, dashboard, alerts_routes, articles, analysis_routes, sources,
                    settings_routes):

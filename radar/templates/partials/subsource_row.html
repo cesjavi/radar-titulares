@@ -1,6 +1,6 @@
 <tr id="sub-{{ s.id }}">
   <td data-label="Subfuente">{{ s.name }}
-    <div class="small muted">{{ s.kind }} · {{ s.section }} · cada {{ (s.min_interval_seconds / 60) | round | int }} min</div>
+    <div class="small muted">{{ s.kind }} · {{ s.section }} · cada {{ ((s.min_interval_seconds + 30) / 60) | round | int }} min</div>
     <div class="small muted break">{{ s.url }}</div>
   </td>
   <td data-label="Estado">
@@ -20,6 +20,11 @@
   </td>
   <td data-label="">
     {% if user and user.is_admin and s.kind != 'demo' %}
+    <form class="inline-form" hx-post="/fuentes/subfuente/{{ s.id }}/intervalo" hx-target="#sub-{{ s.id }}" hx-swap="outerHTML">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label class="small muted">cada <input type="number" name="minutos" min="5" max="1440" value="{{ ((s.min_interval_seconds + 30) / 60) | round | int }}" style="width:5em"> min</label>
+      <button class="btn btn-small btn-ghost" type="submit">Cambiar</button>
+    </form>
     <button class="btn btn-small btn-ghost" hx-post="/fuentes/subfuente/{{ s.id }}/alternar"
             hx-target="#sub-{{ s.id }}" hx-swap="outerHTML">{{ 'Pausar' if s.enabled else 'Activar' }}</button>
     {% endif %}

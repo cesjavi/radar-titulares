@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from radar import runtime
 from radar.collector import enrich
 from radar.collector.adapters import ADAPTERS, MediaAdapter
 from radar.collector.generic import adapter_for_media
@@ -333,7 +334,7 @@ def run_collection(only_media: str | None = None, force: bool = False, enrich_pa
                 for fut in as_completed(futures):
                     summary.runs.append(_store_outcome(fut.result()))
                 if enrich_pages:
-                    per_media = _env_int("RADAR_ENRICH_PER_MEDIA", 10)
+                    per_media = runtime.get("enrich_per_media")
                     if per_media:
                         summary.enrich_runs = _run_enrichment(fetcher, pool, only_media, per_media)
         finally:

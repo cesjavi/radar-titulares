@@ -1,15 +1,52 @@
 # Radar de Titulares
 
-Monitorea los titulares de **Perfil**, **El Destape Web**, **Infobae** y **Página/12**, guarda su historial y los muestra en un panel web en español. El seguimiento inicial apunta a Javier Milei, su Gobierno y la economía argentina, y los temas se pueden configurar desde el panel.
+Monitorea los titulares de diversos medios de comunicación, guarda su historial cronológico y detecta coincidencias temáticas y léxicas a través de un panel web en español, con temas de seguimiento y filtros configurables.
 
-Estado actual: **etapa 5 (IA externa opcional)**. El sistema recolecta los cuatro medios, un motor léxico sin IA detecta coincidencias, arma grupos y genera alertas con evidencia. Opcionalmente, un modelo externo analiza los pares preseleccionados. Telegram y la IA vienen desactivados (ver [PROGRESS.md](PROGRESS.md)).
+Estado actual: sistema completo para uso local y con soporte para VPS y Vercel + Neon. Recolecta Perfil, El Destape Web, Infobae y Página/12 (más los medios que se agreguen desde el panel), un motor léxico sin IA detecta coincidencias, arma grupos y genera alertas con evidencia, y opcionalmente un modelo externo analiza los pares preseleccionados. Telegram y la IA vienen desactivados (ver [PROGRESS.md](PROGRESS.md)).
+
+## Cómo funciona
+
+```
+Medios (RSS, sitemaps, portadas)
+   │  1. recolectar   python -m radar collect
+   ▼
+Notas + versiones de titular + procedencia
+   │  2. enriquecer   lee la página de las notas pendientes: bajada, autor, enlaces
+   ▼
+Motor léxico (sin IA)
+   │  3. comparar     notas de los últimos 3 días entre medios distintos
+   ▼
+Relaciones → Grupos → Alertas con evidencia
+   │  4. (opcional)   IA sobre los pares preseleccionados
+   ▼
+Panel  ← 5. revisión humana: confirmar, rechazar, separar, unir, silenciar
+```
+
+1. **Recolectar.** Cada subfuente (un feed RSS, un sitemap de noticias o una portada) se consulta como mínimo cada ~10 minutos. Las notas se guardan una sola vez aunque aparezcan en varias fuentes; si cambia un titular, se guarda una versión nueva. Las fechas se guardan en UTC y nunca se inventa una hora que la fuente no dio. Una fuente que falla o que cambió de formato queda marcada, no se confunde con "sin noticias".
+2. **Enriquecer.** Para unas pocas notas por medio y ciclo se lee la página y se completan la bajada, la firma y los enlaces a otros medios.
+3. **Comparar.** El motor léxico compara notas de medios distintos y explica cada coincidencia: qué términos, frases o entidades comparten, qué regla se activó y los puntajes parciales. Excluye nombres y términos demasiado frecuentes ("Milei" no alcanza), conserva negaciones y cifras, y no cuenta las republicaciones de agencias como confirmación independiente.
+4. **Agrupar y alertar.** Las relaciones se agrupan evitando encadenar notas que no se parecen entre sí, y cada grupo genera **una** alerta con prioridad baja, media o alta. La prioridad indica qué revisar primero: no significa que algo sea falso ni que haya coordinación.
+5. **IA (opcional).** Si está activada, un modelo externo analiza solo los pares que el motor ya detectó, con límites diarios y salida validada. También se analiza cuando un administrador confirma una relación.
+6. **Revisar.** Un administrador confirma, rechaza, corrige grupos o silencia. **La revisión humana manda**: reprocesar nunca la borra.
+
+**Qué no hace el radar**
+- No determina qué afirmación es verdadera: marca discrepancias para que las revise una persona.
+- No dice que un medio "originó" o "copió" a otro: el orden de aparición no es causalidad. Se muestran por separado la *primera detección* del radar y la *primera publicación según la fuente*.
+- Una coincidencia léxica indica palabras compartidas, no que el mensaje sea el mismo.
+
+**Uso diario**
+```powershell
+.\.venv-win\Scripts\python -m radar collect          # recolecta, analiza y genera alertas (repetir cada ~10 min)
+.\.venv-win\Scripts\uvicorn radar.web.app:create_app --factory --port 8000
+```
+En el panel: **Resumen** (qué revisar primero), **Alertas** y **Revisión** (la cola de trabajo), **Grupos** y **Noticias** (explorar), **Fuentes** (estado de cada medio y alta de medios nuevos) y **Configuración** (temas, secciones prioritarias, límites de alertas e IA).
 
 ## Stack
 
 - Python 3.11+, FastAPI, Jinja2 y HTMX (servido localmente, sin compilar el frontend)
-- SQLAlchemy 2 + Alembic + SQLite (WAL, `busy_timeout`, transacciones breves)
+- SQLAlchemy 2 + Alembic + SQLite (WAL, `busy_timeout`, transacciones breves) o PostgreSQL (Neon)
 - Recolección en un comando separado (`python -m radar collect`) que dispara un timer de systemd
-- No usa Docker, Redis, Celery, Elasticsearch ni modelos de IA
+- No usa Docker, Redis, Celery, Elasticsearch ni modelos de IA locales (la IA externa es opcional)
 
 ## Instalación local
 
@@ -82,36 +119,9 @@ Los datos demo usan dominios `.invalid`, se marcan con la insignia DEMO y un avi
 
 Cada medio tiene su adaptador en `radar/collector/adapters/`, con las fuentes declaradas, las reglas para reconocer una URL de nota, el identificador de origen y las subfuentes editoriales. `init-db` sincroniza esas fuentes con la base y respeta lo que se haya pausado desde el panel.
 
-### Endpoints probados (2026-10-04)
+### Descubrimiento de fuentes
 
-Orden de prioridad: RSS/Atom, después sitemaps de noticias y por último secciones HTML públicas. Ningún endpoint pide login, CAPTCHA ni muro de pago, y no se intenta evadir ninguno.
-
-| Medio | Endpoint | Resultado | Uso |
-|---|---|---|---|
-| Perfil | `https://www.perfil.com/feed` | 200 RSS, 50 notas | Activo |
-| Perfil | `/feed/politica`, `/feed/economia` | 200 RSS, unas 70 notas cada uno | Activos |
-| Perfil | `/sitemap/google-news-lastposts` (en robots.txt) | 200, 100 notas | Activo |
-| Perfil | `/sitemap/lastposts` (en robots.txt) | 200, solo URL y fecha, sin titulares | No se usa |
-| Perfil | `/rss`, `/sitemap-news.xml` | 404 | No existen |
-| Perfil | `/seccion/politica`, `/seccion/economia` | 200 HTML | Respaldo (pausado) |
-| Página/12 | `/arc/outboundfeeds/rss/portada/` | 200 RSS, 6 notas | Activo |
-| Página/12 | `/arc/outboundfeeds/rss/secciones/{el-pais,economia,sociedad,el-mundo}/notas/` | 200 RSS, ~25 notas cada uno | Activos |
-| Página/12 | `/arc/outboundfeeds/breakingnews-short.xml` (en robots.txt) | 200 sitemap de noticias, 100 notas de las últimas horas | Activo |
-| Página/12 | `/arc/outboundfeeds/rss/` (sin sufijo) | 200 RSS, **edición regional "Salta\|12"** | No se usa como feed general |
-| Página/12 | `/arc/outboundfeeds/breakingnews-sitemap.xml` (en robots.txt) | 200, notas de oct. 2025 a ago. 2026 | No se usa (antiguo) |
-| Página/12 | `/rss/portada`, `/rss/secciones/...` (sin `/arc/outboundfeeds`) | 404 | No existen |
-| Página/12 | `/el-pais/`, `/economia/` | 200 HTML (`/secciones/...` redirige dos veces) | Respaldo (pausado) |
-| El Destape | `/sitemap-news.xml` (en robots.txt) | 200, unas 170 notas | Activo |
-| El Destape | `/rss`, `/rss/`, `/feed`, `/arc/outboundfeeds/rss/` | 404 | No existen |
-| El Destape | `/politica`, `/economia` | 200 HTML | Respaldo (pausado) |
-| Infobae | `/arc/outboundfeeds/rss/` | 200 RSS, 100 notas con el cuerpo | Activo |
-| Infobae | `/arc/outboundfeeds/news-sitemap/` | 200, 100 notas | Activo |
-| Infobae | `/arc/outboundfeeds/news-sitemap/category/politica/` y `/economia/` | 200, 31 y 35 notas | Activos |
-| Infobae | `/arc/outboundfeeds/rss/category/politica/` y `/economia/` | 200, ~1 MB cada uno, con cuerpo | Activos cada 20 min |
-| Infobae | `/feeds/rss/` | 404 | No existe |
-| Infobae | `/politica/`, `/economia/` | 200 HTML | Respaldo (pausado) |
-
-robots.txt: Perfil permite todo; Página/12 permite todo y no pide `Crawl-delay`; Infobae excluye solo `/buscador`; El Destape excluye rutas internas y pide `Crawl-delay: 10`, que se respeta. Para repetir la verificación: `python -m radar probe`.
+Orden de prioridad: RSS/Atom, después sitemaps de noticias y por último secciones HTML públicas. Ningún endpoint pide login, CAPTCHA ni muro de pago, y no se intenta evadir ninguno. Se respetan las directivas de `robots.txt` y las pausas entre peticiones (`Crawl-delay`). Para verificar las fuentes en vivo: `python -m radar probe`.
 
 ### Identificadores y subfuentes
 
@@ -250,7 +260,9 @@ Código en `radar/ai/`. **Viene desactivado, y la aplicación funciona igual sin
 - **Claves:** nunca se muestran en el panel, y se ocultan de los errores registrados.
 - **Activación:** `RADAR_AI_ENABLED=true`. Antes conviene revisar los límites de abajo: cada análisis es una llamada al proveedor, que puede tener costo.
 
-**Qué se envía:** solo relaciones que el motor léxico ya detectó, recientes (72 h) y de tipos relevantes (mismo hecho, expresión compartida, titular casi idéntico, afirmaciones distintas). Primero van las que forman parte de alertas pendientes, con un máximo de 10 pares por ejecución. Nunca se envía el histórico completo. Desde la comparación de una relación, un administrador puede pedir el análisis de ese par.
+**Configuración desde el panel.** En **Configuración → Análisis con IA** un administrador puede activar o desactivar la IA, el orden de proveedores, los pares por ejecución, los límites diarios de solicitudes y tokens, si se analiza al confirmar una relación y la prioridad mínima de la alerta cuyos pares se analizan solos. Lo guardado ahí **pisa al `.env`** (tabla `app_settings`, claves `ai_*`) y rige desde la próxima ejecución, sin reiniciar; `ai-status` y los comandos de la CLI también lo respetan. Las claves API y los modelos de Groq y Fireworks se siguen definiendo solo en el `.env`.
+
+**Qué se envía:** solo relaciones que el motor léxico ya detectó, recientes (72 h) y de tipos relevantes (mismo hecho, expresión compartida, titular casi idéntico, afirmaciones distintas). Primero van las que forman parte de alertas pendientes, con un máximo de 10 pares por ejecución. Nunca se envía el histórico completo. Desde la comparación de una relación, un administrador puede pedir el análisis de ese par. Además, **al confirmar una relación** (botón de revisión) el par se analiza solo, si la IA está activada y dentro de los límites; un par ya analizado no se vuelve a enviar y, si el proveedor falla, la confirmación queda guardada igual.
 
 **Salida validada.** Para cada par se piden:
 - si es el mismo hecho, el tema compartido, el enfoque y las entidades;
@@ -258,7 +270,7 @@ Código en `radar/ai/`. **Viene desactivado, y la aplicación funciona igual sin
 - las atribuciones de responsabilidad, el alcance geográfico y el período al que refieren los datos (separado de la fecha de publicación);
 - las diferencias de cifras, si una nota cita a la otra, fragmentos de evidencia, una explicación breve y las limitaciones.
 
-La respuesta se **rechaza** si no es JSON válido, si no cumple el esquema o si algún fragmento citado no existe literalmente en la nota indicada. Se guardan el proveedor, el modelo, la versión del prompt y la fecha.
+La respuesta se **rechaza** si no es JSON válido, si no cumple el esquema o si algún fragmento citado no existe literalmente en la nota indicada. Antes de darla por inválida se hace **un único reintento** que le muestra al modelo qué fragmentos no existen y le pide copiarlos exactos o eliminarlos (cuenta como una solicitud más contra los límites diarios y no se hace si ya se alcanzaron). Se guardan el proveedor, el modelo, la versión del prompt y la fecha.
 
 **Discrepancias:** se derivan para revisión humana (enfoques opuestos, alcance local frente a nacional, períodos distintos, posible confusión entre fecha de publicación y período estadístico, cifras distintas). El sistema **no determina** si una afirmación es verdadera.
 
@@ -278,6 +290,22 @@ La respuesta se **rechaza** si no es JSON válido, si no cumple el esquema o si 
 **En la interfaz:** cada relación indica si fue *detectada por reglas*, *analizada por IA* o *confirmada (o rechazada) por el usuario*.
 - El análisis por IA se guarda aparte (`ai_analyses`), así que reprocesar no lo borra ni toca las revisiones humanas.
 - Una alerta sube a prioridad alta por "enfoque similar respaldado por análisis" solo cuando la IA indica mismo hecho y enfoque similar **sin** discrepancias. Aun así se presenta como pendiente de confirmación humana.
+
+## Configuración desde el panel (administrador)
+
+**Configuración** reúne los ajustes de operación, para no editar el `.env` ni reiniciar. Lo que se guarda en el panel **pisa al `.env`** (tabla `app_settings`); sin valor guardado rige el entorno. Los secretos (claves API, token de Telegram, URL de la base) **nunca** se editan ni se muestran en el panel.
+
+| Sección | Qué se configura | Cuándo rige |
+|---|---|---|
+| Temas y secciones prioritarias | Palabras clave, exclusiones y secciones a priorizar | Próximo análisis |
+| Alertas | Prioridades por tipo de evidencia, mínimo de medios independientes, cooldown, silenciados, prioridad mínima para Telegram | Próximo análisis |
+| Análisis con IA | Activar, proveedores y orden, límites diarios, pares por ejecución, analizar al confirmar, prioridad mínima | Próxima ejecución |
+| Telegram | Activar los avisos | Próximo ciclo |
+| Recolección y retención | Páginas a leer por medio y ciclo, retención de notas y de ejecuciones/avisos | Próxima recolección o mantenimiento |
+| Vista pública | Activar, alertas visibles (`revisadas`, `todas`, `ninguna`) y límite por IP | En unos segundos |
+| Fuentes (`/fuentes`) | Pausar, intervalo mínimo por fuente (5 a 1440 minutos) y alta de medios | Próxima recolección |
+
+Cada formulario exige CSRF y rol administrador y valida los rangos. Activar la vista pública hace visible el panel de lectura a cualquier persona: conviene revisar antes qué alertas se muestran.
 
 ## Vista pública (visitantes sin login)
 

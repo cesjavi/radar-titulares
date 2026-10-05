@@ -76,12 +76,56 @@
     </div>
     <button type="submit" class="btn">Guardar</button>
   </form>
-  <p class="small">Telegram: {% if telegram_configured %}<strong>activado</strong>{% elif telegram_enabled %}activado pero falta token o chat_id{% else %}desactivado{% endif %} <span class="muted">(se configura con variables de entorno; ver README)</span></p>
+</section>
+
+<section class="card" id="telegram">
+  <h2>Telegram (opcional)</h2>
+  <p class="small muted">Avisos de alertas por Telegram. La prioridad mínima se elige arriba, en Alertas. El token del bot y el chat se definen en el <code>.env</code> (<code>RADAR_TELEGRAM_BOT_TOKEN</code> y <code>RADAR_TELEGRAM_CHAT_ID</code>) y nunca se muestran acá.</p>
+  {% if rt_error and rt_error_in == 'telegram' %}<p class="alert alert-error">{{ rt_error }}</p>{% endif %}
+  <p class="small">Estado: {% if telegram_configured %}<strong>activado y listo para enviar</strong>{% elif telegram_enabled %}<strong>activado, pero falta el token o el chat en el .env</strong>{% else %}desactivado{% endif %}</p>
+  <form method="post" action="/configuracion/telegram" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="inline"><input type="checkbox" name="telegram_enabled" {{ 'checked' if rt.telegram_enabled }}> Enviar avisos por Telegram</label>
+    <button type="submit" class="btn">Guardar</button>
+  </form>
+</section>
+
+<section class="card" id="recoleccion">
+  <h2>Recolección y retención</h2>
+  <p class="small muted">Se aplica en la próxima recolección o mantenimiento. El intervalo de cada fuente se cambia en <a href="/fuentes">Fuentes</a>. Con 0 días no se borra nada.</p>
+  {% if rt_error and rt_error_in == 'recoleccion' %}<p class="alert alert-error">{{ rt_error }}</p>{% endif %}
+  <form method="post" action="/configuracion/recoleccion" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="grid-2">
+      <label>Páginas a leer por medio y ciclo (0 = no leer páginas) <input type="number" name="enrich_per_media" min="0" max="{{ rt_limits.enrich_per_media.hi }}" value="{{ rt.enrich_per_media }}"></label>
+      <label>Retención de notas (días) <input type="number" name="retention_days" min="0" max="{{ rt_limits.retention_days.hi }}" value="{{ rt.retention_days }}"></label>
+      <label>Retención de ejecuciones, uso de IA y avisos (días) <input type="number" name="runs_retention_days" min="0" max="{{ rt_limits.runs_retention_days.hi }}" value="{{ rt.runs_retention_days }}"></label>
+    </div>
+    <p class="small muted">La retención no borra notas de grupos corregidos, alertas revisadas ni relaciones con decisión humana.</p>
+    <button type="submit" class="btn">Guardar</button>
+  </form>
+</section>
+
+<section class="card" id="publica">
+  <h2>Vista pública</h2>
+  <p class="small muted">Con la vista pública activa, cualquier persona puede ver Resumen, Noticias, Grupos, Cronología, Métricas y Fuentes en solo lectura, sin iniciar sesión. Nunca se muestran notas de revisión, errores internos ni análisis de IA sin confirmar. Se aplica en unos segundos.</p>
+  {% if rt_error and rt_error_in == 'publica' %}<p class="alert alert-error">{{ rt_error }}</p>{% endif %}
+  <form method="post" action="/configuracion/publica" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="inline"><input type="checkbox" name="public_mode" {{ 'checked' if rt.public_mode }}> Permitir que visitantes vean el panel sin iniciar sesión</label>
+    <div class="grid-2">
+      <label>Alertas visibles para visitantes
+        <select name="public_alerts">{% for c in public_alert_choices %}<option {{ 'selected' if rt.public_alerts == c }}>{{ c }}</option>{% endfor %}</select></label>
+      <label>Solicitudes por minuto e IP (0 = sin límite) <input type="number" name="public_rate_limit" min="0" max="{{ rt_limits.public_rate_limit.hi }}" value="{{ rt.public_rate_limit }}"></label>
+    </div>
+    <button type="submit" class="btn">Guardar</button>
+  </form>
 </section>
 
 <section class="card" id="ia">
   <h2>Análisis con IA externa (opcional)</h2>
-  <p class="small muted">Se configura con variables de entorno (ver README). Las claves nunca se muestran en el panel.</p>
+  <p class="small muted">Lo que se guarda acá pisa al <code>.env</code> y se aplica en la próxima ejecución, sin reiniciar. Las claves y los modelos de Groq y Fireworks se siguen definiendo en el <code>.env</code> y nunca se muestran en el panel.</p>
+  {% if ai_error %}<p class="alert alert-error">{{ ai_error }}</p>{% endif %}
   <dl class="meta compact-meta">
     <dt>Estado</dt><dd>{% if ai_cfg.enabled %}<strong>activado</strong>{% else %}desactivado{% endif %}{% if ai_blocked and ai_cfg.enabled %} · <span class="error-text">{{ ai_blocked }}</span>{% endif %}</dd>
     <dt>Proveedores (en orden)</dt><dd>{{ ai_cfg.models_label }} <div class="small muted">Si el primero falla o se queda sin cuota, se usa el siguiente.</div></dd>
@@ -89,6 +133,27 @@
     <dt>Costo estimado</dt><dd>{% if ai_cfg.has_prices %}USD {{ ai_usage.estimated_cost_usd or 0 }}{% if ai_cfg.daily_budget_usd is not none %} de {{ ai_cfg.daily_budget_usd }} diarios{% endif %} <span class="small muted">— estimación con tarifas configuradas, no es facturación real</span>{% else %}sin tarifas configuradas (no se estima costo){% endif %}</dd>
     <dt>Por ejecución</dt><dd>hasta {{ ai_cfg.max_per_run }} pares · entrada máx. {{ ai_cfg.max_input_chars }} caracteres</dd>
   </dl>
+  <form method="post" action="/configuracion/ia" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="inline"><input type="checkbox" name="enabled" {{ 'checked' if ai_cfg.enabled }}> Análisis con IA activado</label>
+    <label class="inline"><input type="checkbox" name="analyze_on_confirm" {{ 'checked' if ai_cfg.analyze_on_confirm }}> Analizar el par cuando un administrador lo confirma</label>
+    <div class="grid-2">
+      {% for i in (1, 2, 3) %}
+      <label>Proveedor {{ i }}º
+        <select name="provider_{{ i }}">
+          <option value="">—</option>
+          {% for p in ai_providers %}<option value="{{ p }}" {{ 'selected' if ai_cfg.providers[i - 1:i] == [p] }}>{{ p }}</option>{% endfor %}
+        </select></label>
+      {% endfor %}
+      <label>Prioridad mínima de la alerta cuyos pares se analizan solos
+        <select name="min_priority">{% for p in priorities %}<option {{ 'selected' if ai_cfg.min_priority == p }}>{{ p }}</option>{% endfor %}</select></label>
+      <label>Pares por ejecución <input type="number" name="max_per_run" min="{{ ai_limits.max_per_run[0] }}" max="{{ ai_limits.max_per_run[1] }}" value="{{ ai_cfg.max_per_run }}"></label>
+      <label>Solicitudes por día (0 = sin límite) <input type="number" name="daily_max_requests" min="0" max="{{ ai_limits.daily_max_requests[1] }}" value="{{ ai_cfg.daily_max_requests }}"></label>
+      <label>Tokens por día (0 = sin límite) <input type="number" name="daily_max_tokens" min="0" max="{{ ai_limits.daily_max_tokens[1] }}" value="{{ ai_cfg.daily_max_tokens }}"></label>
+    </div>
+    <p class="small muted">Cada análisis es una llamada al proveedor y puede tener costo. Con una prioridad mínima distinta de «baja», solo se analizan pares de alertas pendientes de esa prioridad o mayor. Un par puede usar hasta dos solicitudes (se reintenta una vez si las citas no coinciden).</p>
+    <button type="submit" class="btn">Guardar</button>
+  </form>
 </section>
 
 <section class="card" id="cuenta">

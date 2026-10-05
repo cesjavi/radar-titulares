@@ -24,7 +24,7 @@ Monitorea Perfil, El Destape Web, Infobae y Página/12, guarda el historial de t
 ## Estructura
 ```
 radar/
-  config.py db.py models.py security.py timeutil.py text.py queries.py net.py
+  config.py runtime.py (ajustes del panel que pisan al .env) db.py models.py security.py timeutil.py text.py queries.py net.py
   joblock.py (bloqueo exclusivo SQLite/PostgreSQL)  pipeline.py (ciclos)  pgbackup.py
 app.py + vercel.json   punto de entrada y configuración para Vercel (VERCEL.md)
   collector/   adapters/ (uno por medio), generic.py (medios dados de alta en el panel), parsers.py, html.py, ingest.py, enrich.py,

@@ -22,8 +22,12 @@ Criterios:
 - Clasificá cada afirmación principal como: hecho, opinion, atribucion_causal, generalizacion o
   cita_de_tercero (declaración atribuida a otra persona o institución).
 - "fragmento" y "fragmentos_de_evidencia" deben ser copias textuales y exactas de la nota
-  indicada (A o B). No parafrasees ni inventes citas. Si no hay un fragmento adecuado, no
-  incluyas el elemento.
+  indicada (A o B): caracter por caracter, de un solo tramo continuo y corto (una frase o
+  menos). No parafrasees, no resumas, no cambies el orden ni las palabras, no pases de la
+  tercera persona a la primera, no completes con "..." y no unas partes separadas (por ejemplo,
+  la bajada con el texto). Copiá lo que figura en esa nota, no lo que figura en la otra. Si no
+  hay un fragmento que puedas copiar exacto, no incluyas el elemento: es preferible citar
+  poco a citar algo que no está.
 - Distinguí la fecha de publicación de la nota del período al que refieren los datos (por
   ejemplo, una nota publicada en octubre puede informar la inflación de septiembre). Si el texto
   no indica el período, escribí "no indicado".
@@ -39,6 +43,15 @@ _TAG = re.compile(r"</?\s*nota_[ab]\s*>", re.I)
 def _clean(text: str | None) -> str:
     # Evita que el contenido cierre o abra los delimitadores.
     return _TAG.sub("[etiqueta eliminada]", text or "").strip()
+
+
+def repair_message(errors: list[str]) -> str:
+    """Pedido de corrección cuando la respuesta citó fragmentos que no están en la nota."""
+    listed = "\n".join(f"- {e[:300]}" for e in errors[:8])
+    return ("\n\nTu respuesta anterior fue rechazada por estos problemas:\n" + listed +
+            "\n\nVolvé a responder con el JSON completo. Cada fragmento debe copiarse exacto, "
+            "de un solo tramo, desde la nota indicada; si no podés copiarlo exacto, eliminá ese "
+            "elemento en lugar de reformularlo.")
 
 
 def build_input(a: dict, b: dict, max_chars: int) -> tuple[str, dict[str, str], int]:

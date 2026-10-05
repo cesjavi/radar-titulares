@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from radar.ai.config import load_config as load_ai_config
 from radar.ai.providers import make_provider
-from radar.ai.service import analyze_relation, blocked_reason, pair_filter
+from radar.ai.service import analyze_for_admin, blocked_reason, pair_filter
 from radar.analysis.manual import ManualError, merge_groups, remove_member, review_relation, split_group
 from radar.analysis.relations import RULES, TYPE_LABELS
 from radar.analysis.textproc import highlight
@@ -147,7 +147,7 @@ def relation_compare(request: Request, rel_id: int, db: Session = Depends(get_db
                     rel.article_a_id, rel.article_b_id))
         .order_by(AiAnalysis.created_at.desc()).limit(5)).all()
     ai_ok = next((x for x in ai_rows if x.status == "ok"), None)
-    ai_cfg = load_ai_config()
+    ai_cfg = load_ai_config(db)
     return render(request, "relation_compare.html", {
         "ai": ai_ok, "ai_data": _json(ai_ok.result, {}) if ai_ok else {},
         "ai_flags": _json(ai_ok.flags, []) if ai_ok else [], "ai_attempts": ai_rows,
@@ -168,17 +168,7 @@ def relation_ai(rel_id: int, db: Session = Depends(get_db), user: User = Depends
                     .where(ArticleRelation.id == rel_id))
     if rel is None:
         raise HTTPException(status_code=404, detail="La relación no existe.")
-    cfg = load_ai_config()
-    reason = blocked_reason(db, cfg)
-    if reason:
-        message = reason
-    else:
-        try:
-            analysis = analyze_relation(db, rel, cfg, make_provider(cfg))
-            message = {"ok": "Análisis guardado.", "invalido": "El resultado no pasó la validación y se descartó.",
-                       "rechazado": "El modelo declinó el análisis."}.get(analysis.status, "Falló la llamada al proveedor.")
-        except (RuntimeError, ValueError) as exc:
-            message = str(exc)
+    message = analyze_for_admin(db, rel)
     return RedirectResponse(f"/relaciones/{rel_id}?ia={quote(message)}", status_code=303)
 
 
@@ -192,6 +182,12 @@ def relation_review(rel_id: int, decision: str = Form(...), note: str = Form("",
         review_relation(db, rel, decision, user, note)
     except ManualError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # Al confirmar un par, si la IA está activada se lo analiza (una vez: usa la caché).
+    ai_cfg = load_ai_config(db)
+    if decision == "confirmada" and ai_cfg.enabled and ai_cfg.analyze_on_confirm:
+        db.commit()  # la revisión queda guardada pase lo que pase con el proveedor
+        message = analyze_for_admin(db, rel)
+        return RedirectResponse(f"/relaciones/{rel_id}?ia={quote(message)}", status_code=303)
     return RedirectResponse(f"/relaciones/{rel_id}", status_code=303)
 
 

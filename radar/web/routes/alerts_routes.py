@@ -11,6 +11,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from radar import runtime
 from radar.alerts.config import PRIORITIES
 from radar.alerts.engine import STATUSES, set_status
 from radar.analysis.relations import TYPE_LABELS
@@ -63,7 +64,7 @@ def _demo_filter(stmt, request: Request):
 def public_alert_statuses() -> tuple[str, ...]:
     """Estados de alerta visibles para visitantes (RADAR_PUBLIC_ALERTS)."""
     return {"revisadas": ("revisada",), "todas": ("pendiente", "revisada"),
-            "ninguna": ()}[get_settings().public_alerts]
+            "ninguna": ()}[runtime.get("public_alerts")]
 
 
 def _alert_scope(stmt, request: Request):

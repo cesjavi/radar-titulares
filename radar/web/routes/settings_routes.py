@@ -9,10 +9,20 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from radar import runtime
 from radar.alerts.config import DEFAULTS as ALERT_DEFAULTS
 from radar.alerts.config import PRIORITIES, raw_settings, save_settings
 from radar.models import AppSetting, Topic, User
 from radar.notify import telegram
+from radar.ai.config import (
+    BOOL_FIELDS,
+    INT_LIMITS,
+    PRIORITIES as AI_PRIORITIES,
+    SUPPORTED_PROVIDERS,
+    normalize_providers,
+    save_overrides,
+    stored_overrides,
+)
 from radar.ai.config import load_config as load_ai_config
 from radar.ai.service import blocked_reason as ai_blocked_reason
 from radar.ai.service import usage_today as ai_usage_today
@@ -39,13 +49,17 @@ def _clean_lines(raw: str) -> str:
 
 
 def _page(request, db, user, status_code: int = 200, **extra):
+    ai_cfg = load_ai_config(db)
     ctx = {"topics": db.scalars(select(Topic).order_by(Topic.name)).all(),
            "nav": "configuracion", "min_pw": MIN_PASSWORD_LENGTH,
            "priority_sections": get_setting(db, "priority_sections"),
            "alert_cfg": raw_settings(db), "priorities": PRIORITIES,
            "telegram_enabled": telegram.enabled(), "telegram_configured": telegram.configured(),
-           "ai_cfg": load_ai_config(), "ai_usage": ai_usage_today(db),
-           "ai_blocked": ai_blocked_reason(db, load_ai_config())}
+           "ai_cfg": ai_cfg, "ai_usage": ai_usage_today(db),
+           "ai_blocked": ai_blocked_reason(db, ai_cfg),
+           "ai_providers": SUPPORTED_PROVIDERS, "ai_limits": INT_LIMITS,
+           "ai_saved": stored_overrides(db), "rt": runtime.effective(db),
+           "public_alert_choices": runtime.PUBLIC_ALERT_CHOICES, "rt_limits": runtime.SPECS}
     ctx.update(extra)
     return render(request, "settings.html", ctx, status_code=status_code, user=user)
 
@@ -128,6 +142,67 @@ async def alert_settings_update(request: Request, db: Session = Depends(get_db),
             values.pop(k)
     save_settings(db, values)
     return RedirectResponse("/configuracion#alertas", status_code=303)
+
+
+@router.post("/ia", dependencies=[Depends(verify_csrf)])
+async def ai_settings_update(request: Request, db: Session = Depends(get_db),
+                             user: User = Depends(require_admin)):
+    """Valores de la IA que pisan al .env. Las claves y los modelos de Groq/Fireworks no se
+    editan acá: siguen en el entorno."""
+    form = await request.form()
+    values: dict[str, str] = {}
+    for name in BOOL_FIELDS:
+        values[name] = "true" if form.get(name) else "false"
+    for name, (lo, hi) in INT_LIMITS.items():
+        raw = str(form.get(name, "")).strip()
+        if not raw.isdigit() or not lo <= int(raw) <= hi:
+            return _page(request, db, user, 400,
+                         ai_error=f"«{name}» debe ser un número entre {lo} y {hi}.")
+        values[name] = raw
+    order = normalize_providers(",".join(str(form.get(f"provider_{i}", "")) for i in (1, 2, 3)))
+    if not order:
+        return _page(request, db, user, 400, ai_error="Elegí al menos un proveedor.")
+    values["provider"] = order
+    priority = str(form.get("min_priority", "baja"))
+    values["min_priority"] = priority if priority in AI_PRIORITIES else "baja"
+    save_overrides(db, values)
+    return RedirectResponse("/configuracion#ia", status_code=303)
+
+
+def _save_runtime(request, db, user, form, fields: dict[str, str], anchor: str):
+    """Valida y guarda ajustes operativos (`radar.runtime`). `fields`: nombre -> etiqueta."""
+    try:
+        values = {name: runtime.parse(name, form.get(name), label) for name, label in fields.items()}
+    except runtime.SettingError as exc:
+        return _page(request, db, user, 400, rt_error=str(exc), rt_error_in=anchor)
+    runtime.save(db, values)
+    return RedirectResponse(f"/configuracion#{anchor}", status_code=303)
+
+
+@router.post("/recoleccion", dependencies=[Depends(verify_csrf)])
+async def collection_settings_update(request: Request, db: Session = Depends(get_db),
+                                     user: User = Depends(require_admin)):
+    form = await request.form()
+    return _save_runtime(request, db, user, form, {
+        "enrich_per_media": "Páginas a leer por medio y ciclo",
+        "retention_days": "Retención de notas (días)",
+        "runs_retention_days": "Retención de ejecuciones y avisos (días)"}, "recoleccion")
+
+
+@router.post("/publica", dependencies=[Depends(verify_csrf)])
+async def public_settings_update(request: Request, db: Session = Depends(get_db),
+                                 user: User = Depends(require_admin)):
+    form = await request.form()
+    return _save_runtime(request, db, user, form, {
+        "public_mode": "Vista pública", "public_alerts": "Alertas visibles para visitantes",
+        "public_rate_limit": "Solicitudes por minuto e IP"}, "publica")
+
+
+@router.post("/telegram", dependencies=[Depends(verify_csrf)])
+async def telegram_settings_update(request: Request, db: Session = Depends(get_db),
+                                   user: User = Depends(require_admin)):
+    form = await request.form()
+    return _save_runtime(request, db, user, form, {"telegram_enabled": "Telegram"}, "telegram")
 
 
 @router.post("/cuenta/clave", dependencies=[Depends(verify_csrf)])

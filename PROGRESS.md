@@ -325,6 +325,7 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - [ ] Coincidencia de temas por palabra completa (hoy se busca por subcadena).
 - [x] Alta de medios y subfuentes desde el panel (adaptador genérico + descubrimiento de feeds).
 - [ ] Edición y baja de medios agregados desde el panel; `probe` para medios genéricos.
+- [x] Ajustes de IA, recolección, retención, vista pública y Telegram editables desde el panel.
 - [ ] Retención de `collection_runs`, `login_attempts` y relaciones antiguas.
 - [ ] Mitigar DNS rebinding en el cliente HTTP.
 - [ ] Alertar cuando una fuente pase a "Caída" o "Bloqueada".

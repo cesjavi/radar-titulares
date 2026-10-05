@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from radar import runtime
 from radar.config import BASE_DIR, get_settings
 from radar.db import SessionLocal
 from radar.models import User
@@ -94,7 +95,7 @@ def viewer(request: Request, user: User | None = Depends(current_user_optional))
     if user is not None:
         request.state.public = False
         return user
-    if get_settings().public_mode:
+    if runtime.public_mode():
         request.state.public = True
         return VISITOR
     raise LoginRequired()
@@ -132,7 +133,7 @@ def render(request: Request, name: str, context: dict | None = None, status_code
         "csrf_token": get_or_create_csrf_token(request.session),
         "demo_mode": demo_visible(request),
         "public_view": is_public(request),
-        "public_alerts": get_settings().public_alerts,
+        "public_alerts": runtime.get("public_alerts"),
     }
     ctx.update(context or {})
     return templates.TemplateResponse(request, name, ctx, status_code=status_code)

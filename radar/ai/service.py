@@ -13,8 +13,9 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from radar.ai import PROMPT_VERSION
+from radar.alerts.config import PRIORITY_RANK
 from radar.ai.config import AiConfig, load_config
-from radar.ai.prompt import SYSTEM, build_input
+from radar.ai.prompt import SYSTEM, build_input, repair_message
 from radar.ai.providers import (
     Provider,
     ProviderError,
@@ -157,9 +158,12 @@ def cache_key(cfg: AiConfig, a: Article, b: Article) -> str:
     return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()
 
 
-def select_candidates(db: Session, limit: int) -> list[ArticleRelation]:
+def select_candidates(db: Session, limit: int, min_priority: str = "baja") -> list[ArticleRelation]:
     """Relaciones preseleccionadas: recientes, de tipos relevantes, priorizando las que
-    forman parte de alertas pendientes. Nunca el histórico completo."""
+    forman parte de alertas pendientes. Nunca el histórico completo.
+
+    Con `min_priority` distinta de "baja" solo entran los pares cuyas dos notas están en
+    grupos con alerta pendiente de esa prioridad o mayor."""
     since = utcnow() - timedelta(hours=RECENT_HOURS)
     rels = db.scalars(
         select(ArticleRelation)
@@ -173,6 +177,14 @@ def select_candidates(db: Session, limit: int) -> list[ArticleRelation]:
         select(StoryGroupMember.article_id).join(Alert, Alert.group_id == StoryGroupMember.group_id)
         .where(Alert.status == "pendiente", StoryGroupMember.status == "activo")))
     rels = [r for r in rels if not (r.article_a.is_demo or r.article_b.is_demo)]
+    if min_priority in PRIORITY_RANK and PRIORITY_RANK[min_priority] > 0:
+        wanted = [p for p, rank in PRIORITY_RANK.items() if rank >= PRIORITY_RANK[min_priority]]
+        priority_articles = set(db.scalars(
+            select(StoryGroupMember.article_id)
+            .join(Alert, Alert.group_id == StoryGroupMember.group_id)
+            .where(Alert.status == "pendiente", Alert.priority.in_(wanted),
+                   StoryGroupMember.status == "activo")))
+        rels = [r for r in rels if {r.article_a_id, r.article_b_id} <= priority_articles]
     rels.sort(key=lambda r: (not ({r.article_a_id, r.article_b_id} <= alert_articles), -(r.score or 0)))
     return rels
 
@@ -200,50 +212,68 @@ def analyze_relation(db: Session, rel: ArticleRelation, cfg: AiConfig, provider:
     db.add(analysis)
     db.flush()
 
-    attempt, result, last_exc = 0, None, None
-    while True:
-        attempt += 1
-        try:
-            result = provider.complete(SYSTEM, user, SCHEMA)
-            break
-        except ProviderError as exc:
-            last_exc = exc
-            failures = getattr(exc, "failures", None) or [(provider.name, exc.kind, str(exc))]
-            for name, kind, msg in failures:
-                db.add(AiUsage(day=_today(), provider=name, model=provider.model,
-                               status=kind, error=msg[:500], analysis_id=analysis.id))
-            if isinstance(exc, ProviderQuotaExceeded):
-                _set(db, DISABLED_DAY, str(_today()))
-                break
-            if not exc.retryable or attempt > cfg.max_retries:
-                break
-            wait = exc.retry_after if isinstance(exc, ProviderRateLimited) and exc.retry_after else 2 ** attempt
-            time.sleep(min(wait, 30) if not getattr(provider, "no_sleep", False) else 0)
+    def request(user_text: str):
+        """Una llamada con reintentos acotados. Devuelve (resultado, último error)."""
+        attempt, last_exc = 0, None
+        while True:
+            attempt += 1
+            try:
+                return provider.complete(SYSTEM, user_text, SCHEMA), None
+            except ProviderError as exc:
+                last_exc = exc
+                failures = getattr(exc, "failures", None) or [(provider.name, exc.kind, str(exc))]
+                for name, kind, msg in failures:
+                    db.add(AiUsage(day=_today(), provider=name, model=provider.model,
+                                   status=kind, error=msg[:500], analysis_id=analysis.id))
+                if isinstance(exc, ProviderQuotaExceeded):
+                    _set(db, DISABLED_DAY, str(_today()))
+                    return None, last_exc
+                if not exc.retryable or attempt > cfg.max_retries:
+                    return None, last_exc
+                wait = exc.retry_after if isinstance(exc, ProviderRateLimited) and exc.retry_after else 2 ** attempt
+                time.sleep(min(wait, 30) if not getattr(provider, "no_sleep", False) else 0)
 
+    def meter(result) -> None:
+        used_provider = result.extra.get("provider", provider.name)
+        for name, kind, msg in result.extra.get("fallos_previos", []):
+            db.add(AiUsage(day=_today(), provider=name, model=provider.model, status=kind,
+                           error=msg[:500], analysis_id=analysis.id))
+        analysis.provider = used_provider
+        db.add(AiUsage(day=_today(), provider=used_provider, model=result.model or provider.model,
+                       status="ok", input_tokens=result.input_tokens, output_tokens=result.output_tokens,
+                       cache_read_tokens=result.cache_read_tokens, cache_write_tokens=result.cache_write_tokens,
+                       estimated_cost_usd=_cost(cfg, result.input_tokens, result.output_tokens),
+                       latency_ms=result.latency_ms, request_id=result.request_id, analysis_id=analysis.id))
+        analysis.model = result.model or provider.model
+
+    result, last_exc = request(user)
     if result is None:
         analysis.status = "rechazado" if getattr(last_exc, "kind", "") == "rechazo" else "error"
         analysis.errors = json.dumps([str(last_exc)], ensure_ascii=False)
         _record_failure(db, cfg)
         return analysis
 
-    used_provider = result.extra.get("provider", provider.name)
-    for name, kind, msg in result.extra.get("fallos_previos", []):
-        db.add(AiUsage(day=_today(), provider=name, model=provider.model, status=kind,
-                       error=msg[:500], analysis_id=analysis.id))
-    analysis.provider = used_provider
-    db.add(AiUsage(day=_today(), provider=used_provider, model=result.model or provider.model,
-                   status="ok", input_tokens=result.input_tokens, output_tokens=result.output_tokens,
-                   cache_read_tokens=result.cache_read_tokens, cache_write_tokens=result.cache_write_tokens,
-                   estimated_cost_usd=_cost(cfg, result.input_tokens, result.output_tokens),
-                   latency_ms=result.latency_ms, request_id=result.request_id, analysis_id=analysis.id))
-    analysis.model = result.model or provider.model
+    meter(result)
     try:
         data = parse_and_validate(result.text, sources)
-    except ValidationFailed as exc:
-        analysis.status = "invalido"
-        analysis.errors = json.dumps(exc.errors[:20], ensure_ascii=False)
-        _record_failure(db, cfg)
-        return analysis
+    except ValidationFailed as first:
+        # Un solo reintento, con los errores a la vista, y solo si los límites lo permiten.
+        data = None
+        errors = first.errors
+        db.flush()
+        if blocked_reason(db, cfg) is None:
+            result2, last_exc = request(user + repair_message(first.errors))
+            if result2 is not None:
+                meter(result2)
+                try:
+                    data = parse_and_validate(result2.text, sources)
+                except ValidationFailed as second:
+                    errors = second.errors
+        if data is None:
+            analysis.status = "invalido"
+            analysis.errors = json.dumps(errors[:20], ensure_ascii=False)
+            _record_failure(db, cfg)
+            return analysis
     pub = {"A": _pub(a), "B": _pub(b)}
     analysis.status = "ok"
     analysis.result = json.dumps(data, ensure_ascii=False)
@@ -252,9 +282,32 @@ def analyze_relation(db: Session, rel: ArticleRelation, cfg: AiConfig, provider:
     return analysis
 
 
+ANALYSIS_MESSAGES = {"ok": "Análisis guardado.",
+                     "invalido": "El resultado no pasó la validación y se descartó.",
+                     "rechazado": "El modelo declinó el análisis."}
+
+
+def analyze_for_admin(db: Session, rel: ArticleRelation, cfg: AiConfig | None = None) -> str:
+    """Analiza una relación pedida por un administrador y devuelve un mensaje para mostrar.
+
+    Respeta los límites, usa la caché (un par ya analizado no se vuelve a enviar) y nunca
+    lanza: un fallo de la IA no debe deshacer lo que el administrador acaba de hacer.
+    """
+    cfg = cfg or load_config(db)
+    reason = blocked_reason(db, cfg)
+    if reason:
+        return reason
+    try:
+        analysis = analyze_relation(db, rel, cfg, make_provider(cfg))
+    except Exception as exc:  # configuración inválida, red, etc.
+        log.warning("Análisis de IA pedido por un administrador: %s", type(exc).__name__)
+        return str(exc) if isinstance(exc, (RuntimeError, ValueError)) else "Falló la llamada al proveedor."
+    return ANALYSIS_MESSAGES.get(analysis.status, "Falló la llamada al proveedor.")
+
+
 def run_ai(db: Session, provider: Provider | None = None, limit: int | None = None,
            cfg: AiConfig | None = None) -> AiRunSummary:
-    cfg = cfg or load_config()
+    cfg = cfg or load_config(db)
     summary = AiRunSummary(enabled=cfg.enabled)
     reason = blocked_reason(db, cfg)
     if reason and not cfg.enabled:
@@ -262,7 +315,7 @@ def run_ai(db: Session, provider: Provider | None = None, limit: int | None = No
         return summary
     limit = cfg.max_per_run if limit is None else limit
     # Se examinan como máximo `limit` pares (los ya analizados se resuelven desde la caché).
-    candidates = select_candidates(db, limit)[:limit]
+    candidates = select_candidates(db, limit, cfg.min_priority)[:limit]
     pending = []
     for rel in candidates:
         key = cache_key(cfg, rel.article_a, rel.article_b)

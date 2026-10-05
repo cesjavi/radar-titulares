@@ -17,6 +17,7 @@ from pathlib import Path
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from radar import runtime
 from radar.config import Settings
 from radar.timeutil import utcnow
 
@@ -187,8 +188,10 @@ def purge(db: Session, settings: Settings, dry_run: bool = False) -> PurgeReport
 
     report = PurgeReport()
     now = utcnow()
-    if settings.retention_days:
-        cutoff = now - timedelta(days=settings.retention_days)
+    retention_days = runtime.get("retention_days", db)
+    runs_retention_days = runtime.get("runs_retention_days", db)
+    if retention_days:
+        cutoff = now - timedelta(days=retention_days)
         protected = (select(StoryGroupMember.article_id).join(StoryGroup)
                      .where((StoryGroup.locked.is_(True))
                             | StoryGroup.id.in_(select(Alert.group_id).where(
@@ -206,8 +209,8 @@ def purge(db: Session, settings: Settings, dry_run: bool = False) -> PurgeReport
             report.groups = db.scalar(select(func.count()).select_from(empty.subquery())) or 0
             db.execute(delete(Alert).where(Alert.group_id.in_(empty)))
             db.execute(delete(StoryGroup).where(StoryGroup.id.in_(empty)))
-    if settings.runs_retention_days:
-        cutoff = now - timedelta(days=settings.runs_retention_days)
+    if runs_retention_days:
+        cutoff = now - timedelta(days=runs_retention_days)
         for model, col, attr in ((CollectionRun, CollectionRun.started_at, "runs"),
                                  (AiUsage, AiUsage.created_at, "ai_usage"),
                                  (Notification, Notification.created_at, "notifications")):

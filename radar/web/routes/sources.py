@@ -73,6 +73,22 @@ def sources_status(request: Request, db: Session = Depends(get_db),
     }, user=user)
 
 
+@router.post("/fuentes/subfuente/{sub_id}/intervalo", dependencies=[Depends(verify_csrf)])
+def set_interval(request: Request, sub_id: int, minutos: str = Form(""),
+                 db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    """Intervalo mínimo entre consultas de una fuente (de 5 minutos a 24 horas)."""
+    sub = db.scalar(select(Subsource).options(selectinload(Subsource.media))
+                    .where(Subsource.id == sub_id))
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Subfuente inexistente.")
+    if not minutos.strip().isdigit() or not 5 <= int(minutos) <= 1440:
+        raise HTTPException(status_code=400, detail="El intervalo debe estar entre 5 y 1440 minutos.")
+    sub.min_interval_seconds = int(minutos) * 60 - 30  # margen: el timer no cae justo en el límite
+    db.flush()
+    return render(request, "partials/subsource_row.html",
+                  _sub_ctx(sub, subsource_coverage(db)), user=user)
+
+
 @router.post("/fuentes/subfuente/{sub_id}/alternar", dependencies=[Depends(verify_csrf)])
 def toggle_subsource(request: Request, sub_id: int, db: Session = Depends(get_db),
                      user: User = Depends(require_admin)):

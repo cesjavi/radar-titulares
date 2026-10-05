@@ -61,12 +61,16 @@ def env(tmp_path, monkeypatch):
     from radar.db import reset_engine
 
     monkeypatch.setattr(runner, "LOCK_PATH", tmp_path / "collect.lock")
+    from radar import runtime
+
+    runtime.invalidate()
     get_settings.cache_clear()
     reset_engine()
     from radar.cli import upgrade_db
 
     upgrade_db()
     yield
+    runtime.invalidate()
     reset_engine()
     get_settings.cache_clear()
     if schema:

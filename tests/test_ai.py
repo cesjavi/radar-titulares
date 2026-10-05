@@ -180,6 +180,34 @@ def test_nonexistent_quote_is_rejected(db, story, ai_on):
     assert "no existe en la nota A" in an.errors
 
 
+def test_one_repair_attempt_fixes_paraphrased_quotes(db, story, ai_on):
+    bad = ok_for(story, fragmentos_de_evidencia=[
+        {"articulo": "A", "texto": "El ministro confesó que todo fue un fraude"}])
+    fake = FakeProvider([bad, ok_for(story)])
+    s = run_ai(db, provider=fake, limit=1)
+    assert (s.ok, s.invalid, s.calls) == (1, 0, 1) and len(fake.calls) == 2
+    assert "rechazada" in fake.calls[1]["user"] and "no existe en la nota A" in fake.calls[1]["user"]
+    assert "rechazada" not in fake.calls[0]["user"]
+    assert db.scalar(select(AiAnalysis)).status == "ok"
+    assert db.query(AiUsage).filter(AiUsage.status == "ok").count() == 2  # ambas llamadas se miden
+
+
+def test_repair_is_attempted_once_and_stays_invalid(db, story, ai_on):
+    bad = ok_for(story, fragmentos_de_evidencia=[{"articulo": "A", "texto": "texto que no figura"}])
+    fake = FakeProvider([bad])
+    s = run_ai(db, provider=fake, limit=1)
+    assert s.invalid == 1 and len(fake.calls) == 2
+    assert db.scalar(select(AiAnalysis)).status == "invalido"
+
+
+def test_no_repair_when_daily_limit_is_reached(db, story, ai_on, monkeypatch):
+    monkeypatch.setenv("RADAR_AI_DAILY_MAX_REQUESTS", "1")
+    bad = ok_for(story, fragmentos_de_evidencia=[{"articulo": "A", "texto": "texto que no figura"}])
+    fake = FakeProvider([bad])
+    s = run_ai(db, provider=fake, limit=1)
+    assert s.invalid == 1 and len(fake.calls) == 1
+
+
 def test_quote_from_wrong_side_is_rejected(db, story):
     a, b = story.article_a.title, story.article_b.title
     data = output(a, b, fragmentos_de_evidencia=[{"articulo": "B", "texto": a[:25]}])
@@ -409,3 +437,115 @@ def test_manual_ai_button_respects_limits(client, db, story, admin, ai_on, monke
     token = csrf_from(client.get(f"/relaciones/{story.id}").text)
     r = client.post(f"/relaciones/{story.id}/analizar-ia", data={"csrf_token": token})
     assert "Límite diario de tokens" in r.text
+
+
+def _confirm(client, rel_id, decision="confirmada"):
+    token = csrf_from(client.get(f"/relaciones/{rel_id}").text)
+    return client.post(f"/relaciones/{rel_id}/revisar",
+                       data={"csrf_token": token, "decision": decision}, follow_redirects=False)
+
+
+def test_confirming_a_relation_analyzes_it_with_ai(client, db, story, admin, ai_on, monkeypatch):
+    fake = FakeProvider([ok_for(story)])
+    monkeypatch.setattr("radar.ai.service.make_provider", lambda cfg: fake)
+    login(client)
+    r = _confirm(client, story.id)
+    assert r.status_code == 303 and "ia=" in r.headers["location"]
+    assert len(fake.calls) == 1
+    db.expire_all()
+    assert db.get(ArticleRelation, story.id).review_status == "confirmada"
+    assert db.scalar(select(AiAnalysis)).status == "ok"
+    # Confirmar de nuevo no vuelve a llamar: el par ya está en la caché.
+    _confirm(client, story.id, "pendiente")
+    _confirm(client, story.id)
+    assert len(fake.calls) == 1
+
+
+def test_rejecting_does_not_call_ai(client, db, story, admin, ai_on, monkeypatch):
+    monkeypatch.setattr("radar.ai.service.make_provider", lambda cfg: Boom())
+    login(client)
+    assert _confirm(client, story.id, "rechazada").status_code == 303
+    assert db.query(AiAnalysis).count() == 0
+
+
+def test_confirm_without_ai_enabled_makes_no_call(client, db, story, admin, monkeypatch):
+    monkeypatch.setenv("RADAR_AI_ENABLED", "false")
+    monkeypatch.setattr("radar.ai.service.make_provider", lambda cfg: Boom())
+    login(client)
+    r = _confirm(client, story.id)
+    assert r.status_code == 303 and "ia=" not in r.headers["location"]
+    db.expire_all()
+    assert db.get(ArticleRelation, story.id).review_status == "confirmada"
+
+
+def test_confirm_is_kept_when_ai_fails(client, db, story, admin, ai_on, monkeypatch):
+    monkeypatch.setattr("radar.ai.service.make_provider",
+                        lambda cfg: FakeProvider([ProviderTimeout("lento")]))
+    login(client)
+    assert _confirm(client, story.id).status_code == 303
+    db.expire_all()
+    assert db.get(ArticleRelation, story.id).review_status == "confirmada"
+
+
+# --- configuración desde el panel de administrador ---------------------------------------------
+
+
+def _save_ai(client, **fields):
+    token = csrf_from(client.get("/configuracion").text)
+    data = {"csrf_token": token, "max_per_run": "5", "daily_max_requests": "20",
+            "daily_max_tokens": "100000", "provider_1": "fireworks", "provider_2": "",
+            "provider_3": "", "min_priority": "baja"}
+    data.update(fields)
+    return client.post("/configuracion/ia", data=data, follow_redirects=False)
+
+
+def test_panel_settings_override_env_and_apply_without_restart(client, db, admin, monkeypatch):
+    monkeypatch.setenv("RADAR_AI_ENABLED", "false")
+    monkeypatch.setenv("RADAR_AI_MAX_PER_RUN", "10")
+    login(client)
+    r = _save_ai(client, enabled="on", analyze_on_confirm="on", min_priority="alta")
+    assert r.status_code == 303
+    cfg = load_config()
+    assert (cfg.enabled, cfg.max_per_run, cfg.daily_max_requests, cfg.daily_max_tokens) == \
+        (True, 5, 20, 100000)
+    assert cfg.providers == ["fireworks"] and cfg.min_priority == "alta" and cfg.analyze_on_confirm
+    # Sin la casilla, queda desactivado aunque el entorno diga lo contrario.
+    monkeypatch.setenv("RADAR_AI_ENABLED", "true")
+    _save_ai(client)
+    assert load_config().enabled is False and load_config().analyze_on_confirm is False
+
+
+def test_panel_settings_validate_and_require_admin_and_csrf(client, db, admin, monkeypatch):
+    assert client.post("/configuracion/ia", data={}, follow_redirects=False).status_code in (303, 401, 403)
+    login(client)
+    assert client.post("/configuracion/ia", data={"max_per_run": "5"}).status_code == 403  # sin CSRF
+    assert _save_ai(client, max_per_run="999").status_code == 400
+    assert _save_ai(client, daily_max_requests="-1").status_code == 400
+    assert _save_ai(client, provider_1="", provider_2="inventado").status_code == 400
+    assert "ai_enabled" not in {k for (k,) in db.query(__import__("radar.models", fromlist=["AppSetting"]).AppSetting.key)}
+    # Las claves nunca aparecen en la pantalla.
+    monkeypatch.setenv("FIREWORKS_API_KEY", "fw-secreto-que-no-debe-verse")
+    assert "fw-secreto" not in client.get("/configuracion").text
+
+
+def test_confirm_respects_panel_switch(client, db, story, admin, ai_on, monkeypatch):
+    monkeypatch.setattr("radar.ai.service.make_provider", lambda cfg: Boom())
+    login(client)
+    _save_ai(client, enabled="on")  # sin "analizar al confirmar"
+    r = _confirm(client, story.id)
+    assert r.status_code == 303 and "ia=" not in r.headers["location"]
+
+
+def test_min_priority_limits_candidates(db, media, story):
+    assert select_candidates(db, 10, "baja")
+    update_alerts(db)
+    db.commit()
+    alert = db.scalar(select(Alert))
+    assert alert is not None
+    for prio, expected in (("baja", False), ("media", False), ("alta", True)):
+        alert.priority = prio
+        db.commit()
+        assert bool(select_candidates(db, 10, "alta")) is expected
+    alert.priority = "media"
+    db.commit()
+    assert select_candidates(db, 10, "media") and not select_candidates(db, 10, "alta")

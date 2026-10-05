@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from radar import runtime
 from radar.models import Alert, AlertEvent, Notification
 from radar.timeutil import utcnow
 
@@ -30,7 +31,8 @@ BACKOFF_MINUTES = (1, 5, 15, 60)
 
 
 def enabled() -> bool:
-    return os.getenv("RADAR_TELEGRAM_ENABLED", "").strip().lower() in {"1", "true", "si", "sí", "yes"}
+    """Activado desde el panel o, si no se tocó, por RADAR_TELEGRAM_ENABLED."""
+    return bool(runtime.get("telegram_enabled"))
 
 
 def configured() -> bool:

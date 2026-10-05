@@ -282,9 +282,12 @@ def cmd_purge(args) -> int:
         if args.dry_run:
             db.rollback()
     verb = "Se borrarían" if args.dry_run else "Borrados"
-    print(f"{verb}: {r.articles} notas (> {settings.retention_days} días), {r.groups} grupos vacíos, "
+    from radar import runtime
+
+    rt = runtime.effective()
+    print(f"{verb}: {r.articles} notas (> {rt['retention_days']} días), {r.groups} grupos vacíos, "
           f"{r.runs} ejecuciones, {r.ai_usage} registros de IA y {r.notifications} avisos "
-          f"(> {settings.runs_retention_days} días).")
+          f"(> {rt['runs_retention_days']} días).")
     return 0
 
 
