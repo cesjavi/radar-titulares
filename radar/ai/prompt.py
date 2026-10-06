@@ -34,6 +34,13 @@ Criterios:
 - Indicá el alcance geográfico de cada nota (local, provincial, nacional, internacional, con el
   lugar si se menciona) y si coinciden.
 - "enfoque": similar, diferente, opuesto o incierto. Usá "incierto" si el texto no alcanza.
+- "tono_por_nota": una entrada por nota. "sujeto" es la persona, institución o hecho central de
+  esa nota; "valoracion" es el tono del texto hacia ese sujeto: favorable, critico, neutral o
+  incierto. No es lo mismo que si la noticia es buena o mala: una noticia triste puede ser
+  neutral hacia el sujeto. Valorá solo lo que dice el texto, no tu opinión ni la línea editorial
+  del medio. Las citas de terceros no cuentan como tono de la nota salvo que el texto las adopte.
+  Si no alcanza el texto, usá "incierto". Para favorable o critico, "fragmento" es una copia
+  textual exacta que lo justifique; para neutral o incierto podés dejarlo vacío.
 - "relacion_explicita_de_cita": si una nota cita o menciona a la otra o a su medio.
 - Sé breve en "explicacion_breve" (2 o 3 oraciones)."""
 

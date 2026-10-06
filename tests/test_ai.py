@@ -56,6 +56,9 @@ def output(rel_a_title, rel_b_title, **over):
     data = {
         "mismo_hecho": "si", "tema_compartido": "renuncia en el ministerio de Trabajo",
         "enfoque": "similar", "entidades_compartidas": ["Claudia Pérez"],
+        "tono_por_nota": [
+            {"articulo": "A", "sujeto": "la ministra", "valoracion": "neutral", "fragmento": ""},
+            {"articulo": "B", "sujeto": "la ministra", "valoracion": "incierto", "fragmento": ""}],
         "afirmaciones_principales": [
             {"articulo": "A", "texto": "Renunció la ministra", "tipo": "hecho", "fragmento": rel_a_title[:30]},
             {"articulo": "B", "texto": "Dejó el ministerio", "tipo": "hecho", "fragmento": rel_b_title[:30]}],
@@ -560,6 +563,8 @@ def group_output(arts, **over):
         "mismo_hecho": "si", "tema_compartido": "renuncia en el ministerio de Trabajo",
         "enfoque": "similar", "entidades_compartidas": ["Claudia Pérez"],
         "notas_que_se_apartan": [],
+        "tono_por_nota": [{"articulo": letters[i], "sujeto": "la ministra", "valoracion": "neutral",
+                           "fragmento": ""} for i in range(len(arts))],
         "afirmaciones_principales": [
             {"articulo": letters[i], "texto": "Renuncia", "tipo": "hecho", "fragmento": a.title[:30]}
             for i, a in enumerate(arts)],
@@ -645,3 +650,28 @@ def test_group_ai_button_calls_once_and_shows_result(client, db, story_group, ad
     body = client.get(f"/grupos/{group.id}").text
     assert "Análisis con IA del grupo" in body and "Todas informan la renuncia." in body
     assert client.post(f"/grupos/{group.id}/analizar-ia", data={}).status_code in (400, 403)
+
+
+# --- tono por nota (lectura de la IA, sin verificar) ---------------------------------------------
+
+
+def test_tone_opposite_in_pair_is_flagged_and_quote_is_verified(db, story, ai_on):
+    tono = [{"articulo": "A", "sujeto": "la ministra", "valoracion": "favorable",
+             "fragmento": story.article_a.title[:20]},
+            {"articulo": "B", "sujeto": "la ministra", "valoracion": "critico",
+             "fragmento": story.article_b.title[:20]}]
+    an = _run_with(db, story, tono_por_nota=tono)
+    assert an.status == "ok"
+    flags = json.loads(an.flags)
+    assert any("Tono distinto" in f and "sin verificar" in f for f in flags)
+
+
+def test_tone_favorable_without_quote_or_with_invented_quote_is_rejected():
+    from radar.ai.schema import ValidationFailed, parse_and_validate
+
+    base = output("Renunció la ministra de Trabajo", "Dejó el cargo la ministra de Trabajo")
+    sources = {"A": "Titular: Renunció la ministra de Trabajo", "B": "Titular: Dejó el cargo la ministra de Trabajo"}
+    for frag in ("", "frase inventada que no figura"):
+        base["tono_por_nota"] = [{"articulo": "A", "sujeto": "x", "valoracion": "favorable", "fragmento": frag}]
+        with pytest.raises(ValidationFailed):
+            parse_and_validate(json.dumps(base), sources)

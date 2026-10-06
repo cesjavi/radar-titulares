@@ -10,6 +10,8 @@ TRI = ["si", "no", "incierto"]
 ENFOQUE = ["similar", "diferente", "opuesto", "incierto"]
 CLAIM_TYPES = ["hecho", "opinion", "atribucion_causal", "generalizacion", "cita_de_tercero"]
 SIDES = ["A", "B"]
+TONO = ["favorable", "critico", "neutral", "incierto"]
+TONO_CON_CITA = ("favorable", "critico")
 
 
 def _obj(props: dict, required: list[str] | None = None) -> dict:
@@ -20,11 +22,40 @@ def _obj(props: dict, required: list[str] | None = None) -> dict:
 _STR = {"type": "string"}
 _FRAG = _obj({"articulo": {"type": "string", "enum": SIDES}, "texto": _STR})
 
+
+def tono_schema(side: dict) -> dict:
+    """Tono de cada nota hacia el sujeto central. Lectura automática, sin verificar."""
+    return {"type": "array", "items": _obj({
+        "articulo": side, "sujeto": _STR,
+        "valoracion": {"type": "string", "enum": TONO}, "fragmento": _STR})}
+
+
+def tone_quotes(data: dict) -> list[tuple[str, str, str]]:
+    """Fragmentos del tono a verificar en el texto; los favorables/críticos exigen cita."""
+    out = []
+    for i, t in enumerate(data.get("tono_por_nota", [])):
+        if t["valoracion"] in TONO_CON_CITA or t["fragmento"].strip():
+            out.append((f"tono_por_nota[{i}].fragmento", t["articulo"], t["fragmento"]))
+    return out
+
+
+def tone_flags(data: dict) -> list[str]:
+    """Marca para revisión cuando notas del mismo conjunto valoran en sentidos opuestos."""
+    fav = [t for t in data.get("tono_por_nota", []) if t["valoracion"] == "favorable"]
+    cri = [t for t in data.get("tono_por_nota", []) if t["valoracion"] == "critico"]
+    if not (fav and cri):
+        return []
+    f = ", ".join(sorted({t["articulo"] for t in fav}))
+    c = ", ".join(sorted({t["articulo"] for t in cri}))
+    return [f"Tono distinto según la IA (lectura sin verificar): favorable en {f}, crítico en {c}. "
+            "No implica sesgo ni coordinación."]
+
 SCHEMA = _obj({
     "mismo_hecho": {"type": "string", "enum": TRI},
     "tema_compartido": _STR,
     "enfoque": {"type": "string", "enum": ENFOQUE},
     "entidades_compartidas": {"type": "array", "items": _STR},
+    "tono_por_nota": tono_schema({"type": "string", "enum": SIDES}),
     "afirmaciones_principales": {"type": "array", "items": _obj({
         "articulo": {"type": "string", "enum": SIDES},
         "texto": _STR,
@@ -121,6 +152,7 @@ def parse_and_validate(raw_text: str, sources: dict[str, str]) -> dict:
                for i, c in enumerate(data["afirmaciones_principales"])]
     quoted += [(f"atribuciones_de_responsabilidad[{i}].fragmento", c["articulo"], c["fragmento"])
                for i, c in enumerate(data["atribuciones_de_responsabilidad"])]
+    quoted += tone_quotes(data)
     for path, side, text in quoted:
         frag = _norm(text)
         if len(frag) < 3:
@@ -158,6 +190,7 @@ def derive_flags(data: dict, pub_dates: dict[str, str | None], sources: dict[str
                          "fecha de publicación y no aparece en el texto.")
     if data["diferencias_de_cifras"]:
         flags.append(f"Cifras distintas ({len(data['diferencias_de_cifras'])}).")
+    flags.extend(tone_flags(data))
     for item in data["discrepancias_para_revision"]:
         if item and item not in flags:
             flags.append(item)

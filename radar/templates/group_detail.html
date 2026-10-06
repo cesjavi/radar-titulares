@@ -59,6 +59,7 @@
     <dt>¿Mismo hecho?</dt><dd>{{ ai_data.mismo_hecho }}</dd>
     <dt>Tema compartido</dt><dd>{{ ai_data.tema_compartido }}</dd>
     <dt>Enfoque</dt><dd>{{ ai_data.enfoque }}</dd>
+    <dt>Tono por nota (lectura de la IA, sin verificar)</dt><dd>{% for t in ai_data.tono_por_nota %}{{ t.articulo }}: {{ t.valoracion }}{% if t.sujeto %} hacia {{ t.sujeto }}{% endif %}{% if t.fragmento %} <span class="small muted">(“{{ t.fragmento }}”)</span>{% endif %}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</dd>
     <dt>Entidades compartidas</dt><dd>{{ ai_data.entidades_compartidas | join(', ') or '—' }}</dd>
     <dt>Alcance geográfico</dt><dd>coincide: {{ ai_data.alcance_geografico.coincide }}{% if ai_data.alcance_geografico.detalle %} · {{ ai_data.alcance_geografico.detalle }}{% endif %}</dd>
     <dt>Período de los datos</dt><dd>coincide: {{ ai_data.periodo_de_los_datos.coincide }}{% if ai_data.periodo_de_los_datos.detalle %} · {{ ai_data.periodo_de_los_datos.detalle }}{% endif %}</dd>

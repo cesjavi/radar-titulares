@@ -42,7 +42,8 @@
   <h2>Evidencia</h2>
   <dl class="meta">
     {% if evidence.frases %}<dt>Frases compartidas</dt><dd>{% for f in evidence.frases %}<mark>{{ f }}</mark>{% if not loop.last %} · {% endif %}{% endfor %}</dd>{% endif %}
-    {% if evidence.entidades %}<dt>Entidades compartidas</dt><dd>{{ evidence.entidades | join(', ') }}{% if evidence.entidades_distintivas %} <span class="small muted">(poco frecuentes: {{ evidence.entidades_distintivas | join(', ') }})</span>{% endif %}</dd>{% endif %}
+    {% if evidence.entidades %}<dt>Tono por nota (lectura de la IA, sin verificar)</dt><dd>{% for t in ai_data.tono_por_nota %}{{ t.articulo }}: {{ t.valoracion }}{% if t.sujeto %} hacia {{ t.sujeto }}{% endif %}{% if t.fragmento %} <span class="small muted">(“{{ t.fragmento }}”)</span>{% endif %}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</dd>
+    <dt>Entidades compartidas</dt><dd>{{ evidence.entidades | join(', ') }}{% if evidence.entidades_distintivas %} <span class="small muted">(poco frecuentes: {{ evidence.entidades_distintivas | join(', ') }})</span>{% endif %}</dd>{% endif %}
     {% if evidence.terminos %}<dt>Términos que más aportan</dt><dd>{{ evidence.terminos | join(', ') }}</dd>{% endif %}
     {% if evidence.cifras_a or evidence.cifras_b %}<dt>Cifras</dt><dd>{{ evidence.cifras_a | join(', ') or '—' }} / {{ evidence.cifras_b | join(', ') or '—' }}</dd>{% endif %}
     {% if evidence.polaridad_a or evidence.polaridad_b %}<dt>Negaciones / cese</dt><dd>{{ evidence.polaridad_a | join(', ') or '—' }} / {{ evidence.polaridad_b | join(', ') or '—' }}</dd>{% endif %}

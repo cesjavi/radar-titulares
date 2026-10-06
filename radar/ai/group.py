@@ -13,6 +13,9 @@ from radar.ai.schema import (
     CLAIM_TYPES,
     ENFOQUE,
     TRI,
+    tone_flags,
+    tone_quotes,
+    tono_schema,
     ValidationFailed,
     _check_shape,
     _norm,
@@ -20,7 +23,7 @@ from radar.ai.schema import (
     _STR,
 )
 
-GROUP_PROMPT_VERSION = "grupo-1.0"
+GROUP_PROMPT_VERSION = "grupo-1.1"
 MAX_GROUP_NOTES = 8
 
 SYSTEM = f"""Sos un asistente de análisis de medios (versión de instrucciones {GROUP_PROMPT_VERSION}).
@@ -55,6 +58,13 @@ Criterios:
   cifra de cada nota que la menciona.
 - "enfoque" (del conjunto): similar, diferente, opuesto o incierto. Usá "incierto" si el texto no
   alcanza.
+- "tono_por_nota": una entrada por nota. "sujeto" es la persona, institución o hecho central de
+  esa nota; "valoracion" es el tono del texto hacia ese sujeto: favorable, critico, neutral o
+  incierto. No es lo mismo que si la noticia es buena o mala: una noticia triste puede ser
+  neutral hacia el sujeto. Valorá solo lo que dice el texto, no tu opinión ni la línea editorial
+  del medio. Las citas de terceros no cuentan como tono de la nota salvo que el texto las adopte.
+  Si no alcanza el texto, usá "incierto". Para favorable o critico, "fragmento" es una copia
+  textual exacta que lo justifique; para neutral o incierto podés dejarlo vacío.
 - "relacion_explicita_de_cita": si alguna nota cita o menciona a otra o a su medio.
 - Sé breve en "explicacion_breve" (2 o 3 oraciones)."""
 
@@ -77,6 +87,7 @@ def build_schema(letters: list[str]) -> dict:
         "enfoque": {"type": "string", "enum": ENFOQUE},
         "entidades_compartidas": {"type": "array", "items": _STR},
         "notas_que_se_apartan": {"type": "array", "items": _obj({"articulo": side, "motivo": _STR})},
+        "tono_por_nota": tono_schema(side),
         "afirmaciones_principales": {"type": "array", "items": _obj({
             "articulo": side, "texto": _STR,
             "tipo": {"type": "string", "enum": CLAIM_TYPES}, "fragmento": _STR})},
@@ -141,6 +152,7 @@ def parse_and_validate(raw_text: str, sources: dict[str, str]) -> dict:
                for i, c in enumerate(data["afirmaciones_principales"])]
     quoted += [(f"atribuciones_de_responsabilidad[{i}].fragmento", c["articulo"], c["fragmento"])
                for i, c in enumerate(data["atribuciones_de_responsabilidad"])]
+    quoted += tone_quotes(data)
     for path, side, text in quoted:
         frag = _norm(text)
         if len(frag) < 3:
@@ -171,6 +183,7 @@ def derive_flags(data: dict) -> list[str]:
         flags.append(f"Los datos refieren a períodos distintos: {data['periodo_de_los_datos']['detalle']}")
     if data["diferencias_de_cifras"]:
         flags.append(f"Cifras distintas ({len(data['diferencias_de_cifras'])}).")
+    flags.extend(tone_flags(data))
     for item in data["discrepancias_para_revision"]:
         if item and item not in flags:
             flags.append(item)
