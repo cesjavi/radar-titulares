@@ -105,9 +105,10 @@ def group_list(request: Request, q: str = Query("", max_length=100),
                                            "total": total, "nav": "grupos",
                                            "q": q, "min_medios": min_medios, "corregidos": corregidos,
                                            "orden": orden, "orders": GROUP_ORDERS,
-                                           "qs": urlencode({"q": q, "min_medios": min_medios or "",
-                                                            "corregidos": "true" if corregidos else "",
-                                                            "orden": orden})}, user=user)
+                                           "qs": urlencode({k: v for k, v in {
+                                               "q": q, "min_medios": min_medios,
+                                               "corregidos": "true" if corregidos else "",
+                                               "orden": orden}.items() if v})}, user=user)
 
 
 @router.get("/grupos/{group_id}")

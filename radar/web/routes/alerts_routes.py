@@ -127,8 +127,9 @@ def alert_list(request: Request, estado: str = Query("pendiente", max_length=16)
         "alerts": [(a, _json(a.evidence, {})) for a in alerts], "estado": estado,
         "prioridad": prioridad, "q": q, "min_medios": min_medios, "orden": orden,
         "orders": ALERT_ORDERS,
-        "qs": urlencode({"estado": estado, "prioridad": prioridad, "q": q,
-                         "min_medios": min_medios or "", "orden": orden}),
+        "qs": urlencode({k: v for k, v in {
+            "estado": estado, "prioridad": prioridad, "q": q,
+            "min_medios": min_medios, "orden": orden}.items() if v}),
         "page": page, "pages": pages, "total": total, "counts": counts,
         "statuses": STATUSES, "priorities": PRIORITIES, "nav": "alertas",
     }, user=user)

@@ -85,3 +85,14 @@ def test_search_ignores_accents_and_case(client, db, admin, data):
     assert titles(client.get("/alertas?q=inflacion").text) == ["Inflación de septiembre según el INDEC"]
     assert titles(client.get("/grupos?q=INFLACIÓN+segun").text) == ["Inflación de septiembre según el INDEC"]
     assert titles(client.get("/grupos?q=Inflación").text) == ["Inflación de septiembre según el INDEC"]
+
+
+@pytest.mark.parametrize("path,monkey", [("/grupos", "analysis_routes"), ("/alertas", "alerts_routes")])
+def test_pager_links_without_filters_are_followable(client, db, admin, data, monkeypatch, path, monkey):
+    """Los enlaces de página no deben llevar parámetros vacíos (min_medios=): dan error 422."""
+    monkeypatch.setattr(f"radar.web.routes.{monkey}.PER_PAGE", 1)
+    login(client)
+    body = client.get(path).text
+    link = re.search(rf'href="({path}\?[^"]*page=2)"', body).group(1).replace("&amp;", "&")
+    assert not re.search(r"=(&|$)", link)
+    assert client.get(link).status_code == 200
