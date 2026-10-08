@@ -36,6 +36,7 @@ TASKS = {
     "probar": "Verificar fuentes sin guardar nada (como probe)",
 }
 AI_LIMIT_MAX = 50
+SERVERLESS_AI_LIMIT_MAX = 5  # cada par es una llamada al proveedor dentro de la misma solicitud
 
 _thread: threading.Thread | None = None
 _guard = threading.Lock()
@@ -63,10 +64,18 @@ def parse_options(form) -> dict:
     if task == "recolectar":
         for name in ("force", "no_enrich", "no_analyze"):
             opts[name] = bool(form.get(name))
+    serverless = get_settings().serverless
+    if serverless and task == "recolectar":
+        # Todo corre dentro de una sola solicitud: sin tope, Vercel responde 504.
+        if not opts["medio"]:
+            raise RunError("En Vercel elegí un medio: recolectar todos juntos supera el tiempo "
+                           "máximo de la función. Repetí por medio, o usá los crons.")
+        opts["no_analyze"] = True  # el análisis se pide aparte (tarea «analizar»)
     if task == "ia":
         raw = str(form.get("limit", "")).strip() or "1"
-        if not raw.isdigit() or not 1 <= int(raw) <= AI_LIMIT_MAX:
-            raise RunError(f"El máximo de pares debe estar entre 1 y {AI_LIMIT_MAX}.")
+        limit_max = SERVERLESS_AI_LIMIT_MAX if serverless else AI_LIMIT_MAX
+        if not raw.isdigit() or not 1 <= int(raw) <= limit_max:
+            raise RunError(f"El máximo de pares debe estar entre 1 y {limit_max}.")
         opts["limit"] = int(raw)
     if task == "mantenimiento":
         opts["dry_run"] = bool(form.get("dry_run"))
