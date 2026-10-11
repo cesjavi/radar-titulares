@@ -32,3 +32,6 @@ prompt*.txt
 
 .vercel
 .env*
+
+# archivos de macos:
+.DS_Store
