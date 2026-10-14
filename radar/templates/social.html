@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Redes · Radar de Titulares{% endblock %}
+{% block content %}
+<div class="card-head"><h1>Redes sociales</h1>
+  {% if user and user.is_admin %}<a class="btn btn-small" href="/configuracion#redes">Administrar canales</a>{% endif %}
+</div>
+<p class="muted small">Canales públicos de Telegram, leídos con su vista web pública, y cuentas de X cargadas a mano desde un archivo exportado. Un posteo <strong>no es un medio independiente</strong> ni confirma una nota. La coincidencia con una nota es <strong>léxica</strong> (palabras, frases, nombres): no prueba que el mensaje sea el mismo, ni que uno derive del otro, ni que haya coordinación. El orden de las horas no indica quién originó qué.</p>
+{% if not social_enabled %}<p class="alert alert-warn">La recolección de canales está desactivada en Configuración.</p>{% endif %}
+
+<section class="card">
+  <h2>Canales</h2>
+  <table class="table responsive">
+    <thead><tr><th>Canal o cuenta</th><th>Tipo</th><th>Estado</th><th>Posteos guardados</th><th>Último posteo</th><th>Último éxito</th></tr></thead>
+    <tbody>
+      {% for a in accounts %}
+      {% set c = counts.get(a.id) %}
+      <tr>
+        <td data-label="Canal"><a href="/redes?cuenta={{ a.handle }}">{{ a.name }}</a> <a class="small muted" href="{{ a.url }}" rel="noopener noreferrer nofollow" target="_blank">@{{ a.handle }}</a> <span class="badge">{{ a.platform_label }}</span>
+          {% if a.subscribers %}<div class="small muted">{{ a.subscribers }} suscriptores</div>{% endif %}</td>
+        <td data-label="Tipo">{{ kinds.get(a.kind, a.kind) }}</td>
+        <td data-label="Estado">{% if not a.enabled %}<span class="badge badge-skipped">pausado</span>{% elif a.platform == 'x' %}<span class="muted small">importada a mano{% if a.last_success_at %} el {{ a.last_success_at | local_dt }}{% endif %}</span>{% elif a.last_status %}<span class="badge badge-{{ a.last_status }}">{{ a.last_status }}</span>{% else %}<span class="muted small">sin consultar</span>{% endif %}
+          {% if a.consecutive_failures %}<div class="small muted">{{ a.consecutive_failures }} falla(s) seguidas</div>{% endif %}
+          {% if a.last_error and not public_view %}<div class="small error-text clamp" title="{{ a.last_error }}">{{ a.last_error }}</div>{% endif %}</td>
+        <td data-label="Posteos guardados" class="num">{{ c[0] if c else 0 }}</td>
+        <td data-label="Último posteo" class="small nowrap">{{ c[1] | local_dt if c else '—' }}</td>
+        <td data-label="Último éxito" class="small nowrap">{{ a.last_success_at | local_dt if a.platform != 'x' else '—' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">No hay canales. Ejecutá <code>python -m radar init-db</code> o agregalos en Configuración.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if import_error %}<p class="alert alert-error">{{ import_error }}</p>{% endif %}
+{% if import_result %}
+<p class="alert alert-ok">Importación lista: {{ import_result.new }} posteos nuevos, {{ import_result.updated }} actualizados, {{ import_result.unchanged }} sin cambios
+  ({{ import_result.new_accounts }} cuentas nuevas).
+  {% if import_result.discarded %}{{ import_result.discarded }} descartados por no traer id, autor, fecha o texto. {% endif %}
+  {% if import_result.too_old %}{{ import_result.too_old }} omitidos por ser más viejos que la retención de posteos. {% endif %}
+  {% if import_result.skipped_authors %}{{ import_result.skipped_authors }} omitidos por superar el tope de cuentas nuevas. {% endif %}
+  Vínculos con notas: {{ import_links.links_new }} nuevos, {{ import_links.links_updated }} actualizados.</p>
+{% endif %}
+{% if user and user.is_admin %}
+<section class="card">
+  <h2>Importar posteos de X</h2>
+  <p class="muted small">Radar <strong>no se conecta a X</strong>. Instalá en tu navegador el userscript <a href="https://github.com/prinsss/twitter-web-exporter" rel="noopener noreferrer nofollow" target="_blank">twitter-web-exporter</a>, abrí el perfil, la búsqueda o la lista que quieras, exportá en <strong>JSON o CSV</strong> y subí el archivo acá. Los posteos quedan marcados como <em>importados a mano</em> y sin verificar. Solo se vinculan con notas los de las últimas 72 horas; los más viejos que la retención de posteos se omiten. Subir el mismo archivo otra vez no duplica nada. Máximo {{ x_max_mb }} MB.</p>
+  <form method="post" action="/redes/importar-x" enctype="multipart/form-data" class="filters">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Archivo <input type="file" name="archivo" accept=".json,.csv,application/json,text/csv" required></label>
+    <button type="submit" class="btn">Importar y vincular con notas</button>
+  </form>
+</section>
+{% endif %}
+
+{% if x_top %}
+<section class="card">
+  <h2>Cuentas de X citadas</h2>
+  <p class="muted small">X no se recolecta automáticamente: su <code>robots.txt</code> y sus términos prohíben el acceso automatizado. Acá solo se cuentan los enlaces a posteos de X que ya traen estos mensajes de Telegram, en los posteos mostrados abajo. Citar no es confirmar, y el texto de la vista previa es lo que Telegram mostró: el posteo pudo editarse o borrarse.</p>
+  <p>{% for handle, n in x_top %}<span class="badge">@{{ handle }} · {{ n }}</span> {% endfor %}</p>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Posteos recientes</h2>
+  <form method="get" action="/redes" class="filters">
+    <label>Canal
+      <select name="cuenta"><option value="">Todos</option>
+        {% for a in accounts %}<option value="{{ a.handle }}" {{ 'selected' if f_cuenta == a.handle }}>{{ a.name }}</option>{% endfor %}
+      </select></label>
+    <label class="inline"><input type="checkbox" name="vinculados" value="1" {{ 'checked' if f_vinculados }}> Solo los que coinciden con alguna nota</label>
+    <button type="submit" class="btn">Filtrar</button>
+  </form>
+  <p class="small muted">Se muestran hasta {{ limit }} posteos, del más reciente al más antiguo. Hora de Buenos Aires.</p>
+
+  {% for item in posts %}
+  {% set p = item.post %}
+  <article class="card-inner" id="posteo-{{ p.id }}">
+    <div class="small muted">
+      <strong>{{ p.account.name }}</strong> · {{ p.posted_at | local_dt }}
+      {% if p.views is not none %}· {{ p.views }} vistas{% endif %}
+      {% if p.is_repost %}<span class="badge badge-syndicated">{{ 'Retuit' if p.account.platform == 'x' else 'Reenvío' }}{% if p.forwarded_from %} de {{ p.forwarded_from }}{% endif %}</span>{% endif %}
+      {% if p.edited_at %}<span class="badge badge-skipped">Editado</span>{% endif %}
+      · <a href="{{ p.url }}" rel="noopener noreferrer nofollow" target="_blank">Ver en {{ p.account.platform_label }}</a>{% if p.account.platform == 'x' %} <span class="badge badge-skipped">Importado a mano</span>{% endif %}
+    </div>
+    {% if p.text %}<div class="post-text">{{ p.text }}</div>{% endif %}
+    {% if p.preview_title or p.preview_text %}
+    <div class="small muted post-text">{% if p.preview_title %}<strong>{{ p.preview_title }}</strong>{% endif %}{% if p.preview_text %}<br>{{ p.preview_text }}{% endif %}</div>
+    {% endif %}
+    {% if item.x_refs %}
+    <div class="small muted">Cita un posteo de X:
+      {% for r in item.x_refs %}<a href="{{ r.url }}" rel="noopener noreferrer nofollow" target="_blank">{% if r.handle %}@{{ r.handle }}{% else %}posteo{% endif %} · {{ r.id }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+    </div>
+    {% endif %}
+    {% if item.links %}
+    <ul class="post-links small">
+      {% for l in item.links %}
+      <li>
+        <span class="badge">{{ l.label }}</span>
+        <a href="/noticias/{{ l.article.id }}">{{ l.article.title }}</a>
+        <span class="muted">· {{ l.article.media.name }}</span>
+        {% if l.link.link_type != 'enlace' %}<span class="muted">· similitud léxica {{ '%.2f' | format(l.link.score) }}</span>{% endif %}
+        {% if l.link.review_status != 'pendiente' %}<span class="badge badge-{{ 'ok' if l.link.review_status == 'confirmada' else 'skipped' }}">{{ l.link.review_status }}</span>{% endif %}
+        {% if l.terms or l.entities %}<div class="muted">En común: {{ (l.entities + l.terms) | join(', ') }}</div>{% endif %}
+        {% if l.link.time_delta_seconds is not none %}<div class="muted">Diferencia de hora declarada: {{ (l.link.time_delta_seconds | abs / 60) | round | int }} min ({{ 'el posteo lleva hora posterior a la nota' if l.link.time_delta_seconds > 0 else 'el posteo lleva hora anterior a la nota' if l.link.time_delta_seconds < 0 else 'misma hora' }}). No indica origen.</div>
+        {% else %}<div class="muted">{{ l.link.time_note }}</div>{% endif %}
+        {% for n in l.notes %}<div class="muted">{{ n }}</div>{% endfor %}
+        {% if user and user.is_admin %}
+        <form method="post" action="/redes/vinculo/{{ l.link.id }}/revision" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="volver" value="/redes">
+          <button class="btn btn-small btn-ghost" name="estado" value="confirmada" type="submit">Confirmar</button>
+          <button class="btn btn-small btn-ghost" name="estado" value="rechazada" type="submit">Rechazar</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </article>
+  <hr>
+  {% else %}
+  <p class="muted">Todavía no hay posteos. Los de Telegram se recolectan con <code>python -m radar collect</code> (o desde «Ejecutar ahora» en Configuración); los de X se importan con el formulario de arriba.</p>
+  {% endfor %}
+</section>
+{% endblock %}

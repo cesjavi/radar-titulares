@@ -9,32 +9,53 @@ from __future__ import annotations
 
 import logging
 
-from radar.collector.runner import CollectorBusy, check_media_slug, run_collection
+from radar.collector.runner import CollectorBusy, _make_fetcher, check_media_slug, run_collection
 from radar.db import session_scope
 from radar.joblock import job_lock
 from radar.security import purge_old_attempts
 
 log = logging.getLogger("radar.pipeline")
 
-TASKS = ("todo", "recolectar", "analizar", "mantenimiento")
+TASKS = ("todo", "recolectar", "analizar", "mantenimiento", "redes")
 
 
-def collect_phase(media: str | None = None, force: bool = False, enrich: bool = True) -> dict:
+def collect_phase(media: str | None = None, force: bool = False, enrich: bool = True,
+                  social: bool = True) -> dict:
     if media is not None:
         check_media_slug(media)
     try:
-        summary = run_collection(only_media=media, force=force, enrich_pages=enrich)
+        summary = run_collection(only_media=media, force=force, enrich_pages=enrich, social=social)
     except CollectorBusy:
         return {"estado": "omitido", "motivo": "ya hay una ejecución en curso"}
     with session_scope() as db:
         purge_old_attempts(db)
-    return {
+    result = {
         "estado": "ok",
         "subfuentes": len(summary.runs),
         "con_problemas": len(summary.errors),
         "notas_nuevas": sum(r.items_new for r in summary.runs),
         "paginas_leidas": sum(r.items_updated for r in summary.enrich_runs),
     }
+    if summary.social is not None:
+        result.update({"canales": len(summary.social.outcomes),
+                       "canales_con_problemas": len(summary.social.errors),
+                       "posteos_nuevos": summary.social.new_posts})
+    return result
+
+
+def social_phase(force: bool = False) -> dict:
+    """Solo los canales de Telegram (un cron propio: `recolectar` con `media` no los incluye)."""
+    from radar.config import get_settings
+    from radar.social.collector import run_social_collection
+
+    try:
+        with job_lock(name="redes"):
+            with _make_fetcher(get_settings()) as fetcher:
+                s = run_social_collection(fetcher, force=force)
+    except CollectorBusy:
+        return {"estado": "omitido", "motivo": "ya hay una ejecución en curso"}
+    return {"estado": "ok", "canales": len(s.outcomes), "canales_con_problemas": len(s.errors),
+            "canales_salteados": s.skipped, "posteos_nuevos": s.new_posts}
 
 
 def analysis_phase() -> dict:
@@ -53,6 +74,7 @@ def analysis_phase() -> dict:
         "grupos_nuevos": s.groups_new,
         "alertas_nuevas": getattr(alerts, "created", 0),
         "alertas_actualizadas": getattr(alerts, "updated", 0),
+        "posteos_vinculados": getattr(getattr(s, "social", None), "links_new", 0),
     }
 
 
@@ -88,7 +110,7 @@ def maintenance_phase(dry_run: bool = False) -> dict:
     return {"estado": "simulación (no se borró nada)" if dry_run else "ok",
             "notas_borradas": r.articles, "grupos_vacios_borrados": r.groups,
             "ejecuciones_borradas": r.runs, "registros_ia_borrados": r.ai_usage,
-            "avisos_borrados": r.notifications}
+            "avisos_borrados": r.notifications, "posteos_borrados": r.posts}
 
 
 def run_cycle(task: str = "todo", media: str | None = None, force: bool = False) -> dict:
@@ -101,4 +123,6 @@ def run_cycle(task: str = "todo", media: str | None = None, force: bool = False)
         result["analisis"] = analysis_phase()
     if task == "mantenimiento":
         result["mantenimiento"] = maintenance_phase()
+    if task == "redes":
+        result["redes"] = social_phase(force)
     return result

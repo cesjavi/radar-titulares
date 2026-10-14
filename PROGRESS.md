@@ -316,6 +316,16 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
   - El consumo de CU-horas del plan gratuito (es una estimación: un ciclo cada 10 minutos probablemente lo supere).
   - Los backups con `pg_dump` contra un servidor más nuevo o más viejo que la versión 18 de las herramientas.
 
+### Redes sociales (canales públicos de Telegram)
+- Alcance acordado: solo scraping, sin APIs pagas ni login. Se verificaron los `robots.txt`: `t.me` no publica uno y `t.me/s/<canal>` responde HTML público; YouTube prohíbe `/feeds/videos.xml`; X, Meta y TikTok prohíben o bloquean la recolección automatizada. Por eso solo Telegram.
+- `radar/social/` (parser de `t.me/s`, recolector, vínculo con notas), tablas `social_accounts`, `social_posts` y `post_article_links` (migración `0008`), pantalla `/redes` y administración de canales en Configuración, retención propia (`social_retention_days`).
+- El vínculo reutiliza `Corpus.evaluate` (no cambian reglas ni `ALGORITHM_VERSION`; los vínculos guardan `lexico-1.1+redes-1.0`) y agrega el enlace directo.
+- **Verificado:** 21 pruebas nuevas con HTML sintético; la suite completa pasa en SQLite y en PostgreSQL 18 descartable. En vivo: los 6 canales responden y se guardaron 106 posteos sin errores.
+- **Contra datos reales:** sobre 106 posteos × 930 notas no hubo falsos positivos; la tapa dominical de Clarín no se vincula con notas "de hoy, 4 de octubre". El único solape temático real visto ("Ley de Tierras", similitud 0,21) queda bajo el umbral: el cruce es conservador a propósito.
+- **Despliegue en Vercel/Neon:** correr `init-db` (migración `0008` y carga de canales) antes de desplegar el código nuevo.
+- **X (Twitter):** verificado el 2026-10-05: `x.com/robots.txt` (`User-agent: *` → `Disallow: /`) y `syndication.twitter.com` (`Disallow: /`, además 429) lo impiden; no se recolecta. Se extraen solo las referencias a posteos de X que ya traen los mensajes de Telegram (`radar/social/references.py`).
+- Pendiente: nivel de "mismo tema" para posteos (más laxo), detección de texto repetido entre cuentas, y referencias a Instagram/Facebook.
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.

@@ -137,6 +137,7 @@ class FetchOutcome:
 class CollectionSummary:
     runs: list[CollectionRun] = field(default_factory=list)
     enrich_runs: list[CollectionRun] = field(default_factory=list)
+    social: object = None  # SocialSummary de los canales de Telegram, si se recolectaron
 
     @property
     def errors(self) -> list[CollectionRun]:
@@ -317,7 +318,9 @@ def _run_enrichment(fetcher: SafeFetcher, pool: ThreadPoolExecutor, only_media: 
 
 
 def run_collection(only_media: str | None = None, force: bool = False, enrich_pages: bool = True,
-                   fetcher: SafeFetcher | None = None, lock_path: Path | None = None) -> CollectionSummary:
+                   fetcher: SafeFetcher | None = None, lock_path: Path | None = None,
+                   social: bool = False) -> CollectionSummary:
+    """`social`: también recolecta los canales públicos de Telegram (no con `only_media`)."""
     settings = get_settings()
     if only_media:
         check_media_slug(only_media)
@@ -337,6 +340,10 @@ def run_collection(only_media: str | None = None, force: bool = False, enrich_pa
                     per_media = runtime.get("enrich_per_media")
                     if per_media:
                         summary.enrich_runs = _run_enrichment(fetcher, pool, only_media, per_media)
+            if social and not only_media:
+                from radar.social.collector import run_social_collection
+
+                summary.social = run_social_collection(fetcher, force=force)
         finally:
             if own_fetcher:
                 fetcher.close()

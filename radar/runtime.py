@@ -37,6 +37,8 @@ SPECS: dict[str, Spec] = {
     "retention_days": Spec("int", 0, 3650),
     "runs_retention_days": Spec("int", 0, 3650),
     "telegram_enabled": Spec("bool"),
+    "social_enabled": Spec("bool"),
+    "social_retention_days": Spec("int", 0, 3650),
 }
 
 _lock = threading.Lock()
@@ -108,6 +110,10 @@ def env_defaults() -> dict:
         "retention_days": s.retention_days,
         "runs_retention_days": s.runs_retention_days,
         "telegram_enabled": _env_bool("RADAR_TELEGRAM_ENABLED"),
+        # Recolección de canales públicos de Telegram (redes): activa salvo que se desactive.
+        "social_enabled": os.getenv("RADAR_SOCIAL_ENABLED", "true").strip().lower()
+        not in {"0", "false", "no", "off"},
+        "social_retention_days": _env_int("RADAR_SOCIAL_RETENTION_DAYS", 30, 0, 3650),
     }
 
 

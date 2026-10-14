@@ -187,3 +187,8 @@ mark { background: var(--demo-bg); color: var(--text); padding: 0 2px; border-ra
 .row-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; }
 legend { font-weight: 600; font-size: .9rem; }
+
+/* Redes sociales */
+.post-text { white-space: pre-line; overflow-wrap: anywhere; margin: 6px 0; }
+.post-links { margin: 8px 0 0; padding-left: 18px; }
+.post-links li { margin: 4px 0; }

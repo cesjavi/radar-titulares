@@ -49,7 +49,7 @@ $env:RADAR_SECRET_KEY = "<48+ caracteres aleatorios>"
 $env:RADAR_DATABASE_URL = "<cadena CON pooler>"
 $env:RADAR_DATABASE_URL_DIRECT = "<cadena directa>"
 .\.venv-win\Scripts\pip install -r requirements.txt
-.\.venv-win\Scripts\python -m radar init-db          # migraciones 0001–0007 + medios, temas, secciones
+.\.venv-win\Scripts\python -m radar init-db          # migraciones 0001–0008 + medios, temas, secciones y canales de Telegram
 .\.venv-win\Scripts\python -m radar create-admin admin
 .\.venv-win\Scripts\python -m radar collect --force  # primera carga de datos (opcional)
 ```
@@ -96,6 +96,7 @@ Agregá `crons` a `vercel.json`. El trabajo se reparte para que cada invocación
   { "path": "/api/cron?tarea=recolectar&media=infobae",   "schedule": "2,12,22,32,42,52 * * * *" },
   { "path": "/api/cron?tarea=recolectar&media=pagina12",  "schedule": "4,14,24,34,44,54 * * * *" },
   { "path": "/api/cron?tarea=recolectar&media=eldestape", "schedule": "6,16,26,36,46,56 * * * *" },
+  { "path": "/api/cron?tarea=redes",                      "schedule": "7,17,27,37,47,57 * * * *" },
   { "path": "/api/cron?tarea=analizar",                   "schedule": "8,18,28,38,48,58 * * * *" },
   { "path": "/api/cron?tarea=mantenimiento",              "schedule": "30 7 * * *" }
 ]
@@ -104,7 +105,8 @@ Agregá `crons` a `vercel.json`. El trabajo se reparte para que cada invocación
 - **Autenticación:** el endpoint exige `Authorization: Bearer $CRON_SECRET` (Vercel lo envía solo si definís `CRON_SECRET`). Sin la variable responde 503; con un valor incorrecto, 401.
 - **Duplicados y superposición:** Vercel no reintenta, la entrega es "best effort" y a veces se duplica. Cada fase toma un bloqueo con vencimiento en Neon y respeta el intervalo mínimo de cada fuente, así que una invocación repetida responde `"omitido"` sin hacer trabajo.
 - **Duración:** `maxDuration` está en 300 s (el máximo del plan Hobby; Pro admite hasta 800 s). El ciclo completo con los cuatro medios tardó unos 150–200 s en pruebas locales, casi todo en pausas de cortesía entre solicitudes (El Destape pide 10 s); en Vercel no se midió. Por eso se recomienda un cron por medio.
-- **Tareas:** `tarea=recolectar|analizar|mantenimiento|todo` y `media=perfil|eldestape|infobae|pagina12`.
+- **Redes (Telegram):** `tarea=redes` recolecta solo los canales. Es necesaria porque `recolectar` con `media=…` no los incluye; sin ese cron en Vercel no se recolectan. Con `tarea=todo` o `tarea=recolectar` sin `media` sí se incluyen.
+- **Tareas:** `tarea=recolectar|analizar|mantenimiento|redes|todo` y `media=perfil|eldestape|infobae|pagina12`.
 - **Probarlo a mano:** `curl -H "Authorization: Bearer $CRON_SECRET" "https://TU-DOMINIO/api/cron?tarea=analizar"`.
 
 ## Tamaño de la base y plan gratuito de Neon
@@ -131,7 +133,7 @@ Límites del plan gratuito según la documentación de Neon: **1 GB por proyecto
 |---|---|---|
 | Suite completa sobre SQLite | `pytest` | 261 pasan, 4 omitidas (las que exigen Postgres) |
 | Suite completa sobre PostgreSQL 18.6 real | `RADAR_TEST_PG_URL=… pytest` (un esquema descartable por prueba) | 258 pasan, 7 omitidas (las propias de SQLite), 0 fallas |
-| Migraciones 0001–0007 | `init-db` sobre PostgreSQL | sin cambios en las migraciones |
+| Migraciones 0001–0008 | `init-db` sobre PostgreSQL | sin cambios en las migraciones |
 | Ingesta real de los 4 medios sobre PostgreSQL | `collect --force` | 17 fuentes, 856 notas, 36 relaciones, 12 grupos, 12 alertas; el segundo análisis no crea nada |
 | Pantallas con datos reales sobre PostgreSQL | visitante y administrador | 45 páginas, ningún error 5xx |
 | `app.py` | se niega sin `RADAR_SECRET_KEY` y sin PostgreSQL; arranca con PostgreSQL | comprobado |

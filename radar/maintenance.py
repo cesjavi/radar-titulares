@@ -169,6 +169,7 @@ class PurgeReport:
     ai_usage: int = 0
     notifications: int = 0
     groups: int = 0
+    posts: int = 0
 
 
 def purge(db: Session, settings: Settings, dry_run: bool = False) -> PurgeReport:
@@ -182,6 +183,7 @@ def purge(db: Session, settings: Settings, dry_run: bool = False) -> PurgeReport
         ArticleRelation,
         CollectionRun,
         Notification,
+        SocialPost,
         StoryGroup,
         StoryGroupMember,
     )
@@ -209,6 +211,12 @@ def purge(db: Session, settings: Settings, dry_run: bool = False) -> PurgeReport
             report.groups = db.scalar(select(func.count()).select_from(empty.subquery())) or 0
             db.execute(delete(Alert).where(Alert.group_id.in_(empty)))
             db.execute(delete(StoryGroup).where(StoryGroup.id.in_(empty)))
+    social_days = runtime.get("social_retention_days", db)
+    if social_days:
+        cond = SocialPost.posted_at < now - timedelta(days=social_days)
+        report.posts = db.scalar(select(func.count()).select_from(SocialPost).where(cond)) or 0
+        if not dry_run:
+            db.execute(delete(SocialPost).where(cond))
     if runs_retention_days:
         cutoff = now - timedelta(days=runs_retention_days)
         for model, col, attr in ((CollectionRun, CollectionRun.started_at, "runs"),

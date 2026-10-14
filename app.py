@@ -40,7 +40,7 @@ app = create_app()
 def cron(request: Request, tarea: str = "todo", media: str | None = None):
     """Ciclo programado (Vercel Cron). Protegido con `Authorization: Bearer $CRON_SECRET`.
 
-    ?tarea=todo|recolectar|analizar   (por defecto, todo)
+    ?tarea=todo|recolectar|analizar|mantenimiento|redes   (por defecto, todo)
     ?media=perfil|eldestape|infobae|pagina12   (solo con tarea=recolectar o todo)
 
     Para repartir el trabajo (duración máxima por invocación) se pueden definir varios crons,

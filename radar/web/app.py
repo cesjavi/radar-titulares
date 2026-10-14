@@ -24,6 +24,7 @@ from radar.web.routes import (
     auth,
     dashboard,
     settings_routes,
+    social_routes,
     sources,
 )
 
@@ -141,6 +142,6 @@ def create_app() -> FastAPI:
         return FileResponse(BASE_DIR / "radar" / "static" / "favicon.svg", media_type="image/svg+xml")
 
     for module in (auth, dashboard, alerts_routes, articles, analysis_routes, sources,
-                   settings_routes):
+                   settings_routes, social_routes):
         app.include_router(module.router)
     return app

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from radar.collector.adapters import ADAPTERS
-from radar.models import AppSetting, Media, Subsource, Topic
+from radar.models import AppSetting, Media, SocialAccount, Subsource, Topic
 
 # Valor anterior de priority_sections: si la base todavía lo tiene, se actualiza al nuevo.
 _OLD_PRIORITY_SECTIONS = "politica,economia"
@@ -84,6 +84,36 @@ def seed_settings(db: Session) -> int:
             created += 1
         elif key == "priority_sections" and row.value == _OLD_PRIORITY_SECTIONS:
             row.value = value  # no pisa lo que el usuario haya personalizado
+    return created
+
+
+# Canales públicos de Telegram sugeridos (figuras y organizaciones públicas, y un medio). Se cargan
+# una sola vez; después se administran desde Configuración (agregar, pausar, quitar).
+DEFAULT_SOCIAL_ACCOUNTS = [
+    {"handle": "cfkargentinaok", "name": "Cristina Kirchner", "kind": "persona"},
+    {"handle": "kicillofok", "name": "Axel Kicillof", "kind": "persona"},
+    {"handle": "la_campora", "name": "La Cámpora", "kind": "organizacion"},
+    {"handle": "wadodepedro", "name": "Wado de Pedro", "kind": "persona"},
+    {"handle": "juangrabois23", "name": "Juan Grabois", "kind": "persona"},
+    {"handle": "clarincom", "name": "Clarín", "kind": "medio"},
+]
+SOCIAL_SEEDED_KEY = "social_seeded"
+
+
+def seed_social_accounts(db: Session, force: bool = False) -> int:
+    """Carga los canales sugeridos. Sin `force` lo hace una sola vez: si después se quitan a mano,
+    no vuelven a aparecer al repetir `init-db`. Con `force` agrega los que falten."""
+    if not force and db.get(AppSetting, SOCIAL_SEEDED_KEY) is not None:
+        return 0
+    created = 0
+    for spec in DEFAULT_SOCIAL_ACCOUNTS:
+        exists = db.scalar(select(SocialAccount).where(
+            SocialAccount.platform == "telegram", SocialAccount.handle == spec["handle"]))
+        if exists is None:
+            db.add(SocialAccount(platform="telegram", **spec))
+            created += 1
+    if db.get(AppSetting, SOCIAL_SEEDED_KEY) is None:
+        db.add(AppSetting(key=SOCIAL_SEEDED_KEY, value="1"))
     return created
 
 

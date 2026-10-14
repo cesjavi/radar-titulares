@@ -106,6 +106,7 @@ Los datos demo usan dominios `.invalid`, se marcan con la insignia DEMO y un avi
 | `python -m radar notify` | Envía los avisos pendientes por Telegram (solo si está activado). |
 | `python -m radar ai-status` | Estado de la IA externa: configuración, uso de hoy y límites (no muestra secretos). |
 | `python -m radar ai-analyze [--limit N]` | Analiza con IA hasta N relaciones preseleccionadas. También corre dentro de `collect` y `analyze` si está activada. |
+| `python -m radar import-x ARCHIVO` | Importa un JSON/CSV exportado con [twitter-web-exporter](https://github.com/prinsss/twitter-web-exporter) y lo vincula con las notas. Radar no se conecta a X; también se sube desde «Redes». |
 | `python -m radar probe [--media ...]` | Verifica en vivo todas las fuentes declaradas, sin guardar nada. |
 | `python -m radar demo-load` / `demo-clear` | Carga o elimina los datos ficticios. |
 | `alembic revision --autogenerate -m "..."` | Crea una migración nueva después de cambiar `radar/models.py`. |
@@ -240,6 +241,19 @@ Código en `radar/alerts/`. Se crea **una alerta por grupo** cuando el grupo tie
 - Hasta 5 intentos, con esperas de 1, 5, 15 y 60 minutos. Cada intento queda registrado en el historial de la alerta, y el token nunca se guarda en los errores.
 - Solo se avisan las alertas con prioridad igual o mayor a la configurada (alta por defecto). El mensaje es breve: prioridad, medios, titular y enlace.
 - Durante las pruebas el envío real está bloqueado: se usa un transporte simulado salvo que se defina `RADAR_TELEGRAM_ALLOW_TEST_SEND=1`.
+
+## Redes sociales (canales públicos de Telegram)
+
+Se leen con la **vista web pública** de cada canal (`https://t.me/s/<canal>`): sin API, sin cuenta y sin pagar. La descarga pasa por `radar/net.py` como todo lo demás (dominio permitido, límites, `robots.txt`, sin insistir ante 403/429). Instagram, Facebook, TikTok y X **no se recolectan**: sus términos prohíben el acceso automatizado y exigen iniciar sesión, algo que este proyecto no evade.
+
+- **Canales iniciales** (se cargan una sola vez con `init-db`): `cfkargentinaok`, `kicillofok`, `la_campora`, `wadodepedro`, `juangrabois23` y `clarincom`. Se agregan, pausan, renombran o quitan desde **Configuración → Redes sociales** (al agregar se verifica en vivo que el canal exista y tenga vista web pública), y hay un botón para reponer los sugeridos.
+- `python -m radar collect` los recolecta junto con los medios (`--no-social` los omite); `analyze` los vincula con las notas. En Vercel lo hace el mismo cron. La primera vez trae hasta 3 páginas de historia (~7 días).
+- **Pantalla Redes** (solo con sesión): canales con su estado, posteos recientes y, debajo de cada uno, las notas con las que coincide. Un administrador puede confirmar o rechazar cada vínculo; reprocesar no los pisa.
+- **Vínculo posteo ↔ nota:** reutiliza el motor léxico (mismos umbrales, negaciones y cifras) y además detecta el **enlace directo** (el posteo incluye la URL de una nota ya registrada). Los mensajes que solo traen un enlace se comparan por el título y la descripción de su vista previa (p. ej. el texto de un posteo de X).
+- **Lo que no significa:** un posteo **no es un medio independiente** ni confirma una nota; un reenvío es una réplica; la coincidencia es léxica y el orden de las horas no indica origen ni coordinación. La diferencia de hora solo se muestra si la nota tiene hora.
+- **Volumen:** estos canales publican pocas veces por semana, así que en una ventana de 72 h suele haber pocos posteos y pocos vínculos. Los posteos se conservan `RADAR_SOCIAL_RETENTION_DAYS` días (30 por defecto, editable en el panel). `RADAR_SOCIAL_ENABLED=false` apaga la recolección.
+- **X (Twitter) no se recolecta:** `x.com/robots.txt` y `syndication.twitter.com/robots.txt` tienen `Disallow: /` para clientes automáticos, y sus términos prohíben el scraping. Lo único que se usa son los enlaces a posteos de X que ya traen los mensajes de Telegram: la pantalla Redes muestra «Cita un posteo de X» y las cuentas de X más citadas, y el texto de la vista previa entra al cruce con las notas. Para recolectar X de verdad haría falta su API oficial (paga) o un acceso autorizado.
+- Modelo: tablas `social_accounts`, `social_posts` y `post_article_links` (migración `0008`).
 
 ## Análisis con IA externa (opcional)
 

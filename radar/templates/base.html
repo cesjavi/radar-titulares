@@ -27,6 +27,7 @@
       <a href="/noticias" class="{{ 'active' if nav == 'noticias' }}">Noticias</a>
       <a href="/grupos" class="{{ 'active' if nav == 'grupos' }}">Grupos</a>
       <a href="/cronologia" class="{{ 'active' if nav == 'cronologia' }}">Cronología</a>
+      {% if not user.is_anonymous %}<a href="/redes" class="{{ 'active' if nav == 'redes' }}">Redes</a>{% endif %}
       {% if not user.is_anonymous %}
       <a href="/revision" class="{{ 'active' if nav == 'revision' }}">Revisión</a>
       <a href="/historial" class="{{ 'active' if nav == 'historial' }}">Historial</a>

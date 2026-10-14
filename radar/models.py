@@ -609,3 +609,106 @@ class AiUsage(Base):
     group_analysis_id: Mapped[int | None] = mapped_column(
         ForeignKey("ai_group_analyses.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+# --- Redes sociales (canales públicos de Telegram) -------------------------------------------
+
+
+class SocialAccount(Base):
+    """Cuenta o canal público monitoreado. No es un medio: no cuenta como medio independiente."""
+
+    __tablename__ = "social_accounts"
+    __table_args__ = (UniqueConstraint("platform", "handle"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    platform: Mapped[str] = mapped_column(String(16), default="telegram", server_default="telegram")
+    handle: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(128))
+    kind: Mapped[str] = mapped_column(String(16), default="persona", server_default="persona")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    min_interval_seconds: Mapped[int] = mapped_column(Integer, default=570, server_default="570")
+    subscribers: Mapped[int | None] = mapped_column(Integer)
+    last_fetch_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # ok | empty | error | blocked (resultado de la última consulta)
+    last_status: Mapped[str | None] = mapped_column(String(16))
+    last_items_found: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    posts: Mapped[list[SocialPost]] = relationship(back_populates="account")
+
+    @property
+    def url(self) -> str:
+        if self.platform == "x":
+            return f"https://x.com/{self.handle}"
+        return f"https://t.me/{self.handle}"
+
+    @property
+    def platform_label(self) -> str:
+        return {"x": "X", "telegram": "Telegram"}.get(self.platform, self.platform)
+
+
+class SocialPost(Base):
+    __tablename__ = "social_posts"
+    __table_args__ = (
+        UniqueConstraint("account_id", "external_id"),
+        Index("ix_social_posts_posted_at", "posted_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(
+        ForeignKey("social_accounts.id", ondelete="CASCADE"), index=True)
+    external_id: Mapped[str] = mapped_column(String(32))  # número del mensaje en el canal
+    url: Mapped[str] = mapped_column(String(512))
+    text: Mapped[str] = mapped_column(Text, default="")
+    # Vista previa del enlace que acompaña al mensaje (título y descripción de la página enlazada).
+    preview_title: Mapped[str | None] = mapped_column(Text)
+    preview_text: Mapped[str | None] = mapped_column(Text)
+    links: Mapped[str] = mapped_column(Text, default="[]", server_default="[]")  # JSON: URLs
+    search_text: Mapped[str] = mapped_column(Text, default="")
+    # Telegram siempre informa la hora de cada mensaje.
+    posted_at: Mapped[datetime] = mapped_column(DateTime)
+    # Reenvío desde otro canal: es una réplica, no una publicación propia.
+    is_repost: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    forwarded_from: Mapped[str | None] = mapped_column(String(128))
+    views: Mapped[int | None] = mapped_column(Integer)
+    content_hash: Mapped[str] = mapped_column(String(64))
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    account: Mapped[SocialAccount] = relationship(back_populates="posts")
+    article_links: Mapped[list[PostArticleLink]] = relationship(
+        back_populates="post", cascade="all, delete-orphan")
+
+
+class PostArticleLink(Base):
+    """Coincidencia léxica entre un posteo y una nota. No prueba que el mensaje sea el mismo,
+    ni que uno derive del otro."""
+
+    __tablename__ = "post_article_links"
+    __table_args__ = (UniqueConstraint("post_id", "article_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    post_id: Mapped[int] = mapped_column(
+        ForeignKey("social_posts.id", ondelete="CASCADE"), index=True)
+    article_id: Mapped[int] = mapped_column(
+        ForeignKey("articles.id", ondelete="CASCADE"), index=True)
+    link_type: Mapped[str] = mapped_column(String(32))
+    score: Mapped[float] = mapped_column(Float, default=0.0)
+    scores: Mapped[str] = mapped_column(Text, default="{}")
+    evidence: Mapped[str] = mapped_column(Text, default="{}")
+    algorithm_version: Mapped[str] = mapped_column(String(48), default="")
+    time_delta_seconds: Mapped[int | None] = mapped_column(Integer)
+    time_note: Mapped[str] = mapped_column(Text, default="")
+    # pendiente | confirmada | rechazada (la revisión humana no se pisa al reprocesar)
+    review_status: Mapped[str] = mapped_column(String(16), default="pendiente",
+                                               server_default="pendiente", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    post: Mapped[SocialPost] = relationship(back_populates="article_links")
+    article: Mapped[Article] = relationship()

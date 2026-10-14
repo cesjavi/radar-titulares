@@ -160,6 +160,61 @@
   </form>
 </section>
 
+<section class="card" id="redes">
+  <h2>Redes sociales (canales públicos de Telegram)</h2>
+  <p class="small muted">Se leen con la vista web pública de cada canal (<code>t.me/s/canal</code>), sin API ni cuenta, y respetando los límites de la descarga segura. Solo canales públicos de figuras, organizaciones y medios; no cuentas de particulares. Un posteo <strong>no cuenta como medio independiente</strong>, y una coincidencia con una nota es léxica: no prueba que el mensaje sea el mismo ni que haya coordinación.</p>
+  {% if social_error %}<p class="alert alert-error">{{ social_error }}</p>{% endif %}
+  <form method="post" action="/configuracion/redes/ajustes" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="grid-2">
+      <label class="inline"><input type="checkbox" name="social_enabled" {{ 'checked' if rt.social_enabled }}> Recolectar los canales en cada ciclo</label>
+      <label>Retención de posteos (días, 0 = no borrar) <input type="number" name="social_retention_days" min="0" max="{{ rt_limits.social_retention_days.hi }}" value="{{ rt.social_retention_days }}"></label>
+    </div>
+    <button type="submit" class="btn">Guardar</button>
+  </form>
+
+  <h3>Canales</h3>
+  {% for a in social_accounts %}
+  <details class="topic" id="canal-{{ a.id }}">
+    <summary><strong>{{ a.name }}</strong> <span class="muted small">@{{ a.handle }} · {{ social_kinds.get(a.kind, a.kind) }}{% if a.subscribers %} · {{ a.subscribers }} suscriptores{% endif %}</span>
+      {% if not a.enabled %}<span class="badge badge-skipped">Pausado</span>{% elif a.last_status %}<span class="badge badge-{{ a.last_status }}">{{ a.last_status }}</span>{% endif %}</summary>
+    {% if a.last_error %}<p class="small error-text">{{ a.last_error }}</p>{% endif %}
+    <form method="post" action="/configuracion/redes/canal/{{ a.id }}" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="grid-2">
+        <label>Nombre <input name="name" value="{{ a.name }}" required maxlength="128"></label>
+        <label>Tipo <select name="kind">{% for k, label in social_kinds.items() %}<option value="{{ k }}" {{ 'selected' if a.kind == k }}>{{ label }}</option>{% endfor %}</select></label>
+        <label>Consultar cada (minutos, 5 a 1440) <input type="number" name="minutos" min="5" max="1440" value="{{ ((a.min_interval_seconds + 30) / 60) | round | int }}"></label>
+      </div>
+      <label class="inline"><input type="checkbox" name="enabled" {{ 'checked' if a.enabled }}> Activo</label>
+      <button type="submit" class="btn">Guardar</button>
+    </form>
+    <form method="post" action="/configuracion/redes/canal/{{ a.id }}/quitar" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-small btn-ghost">Quitar el canal y sus posteos</button>
+    </form>
+  </details>
+  {% else %}
+  <p class="muted">No hay canales configurados.</p>
+  {% endfor %}
+
+  <h3>Agregar un canal</h3>
+  <form method="post" action="/configuracion/redes/canal" class="stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="grid-2">
+      <label>Canal (@usuario o https://t.me/usuario) <input name="handle" required maxlength="128" placeholder="@canal"></label>
+      <label>Nombre (opcional, si no se usa el del canal) <input name="name" maxlength="128"></label>
+      <label>Tipo <select name="kind">{% for k, label in social_kinds.items() %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select></label>
+    </div>
+    <p class="small muted">Antes de guardarlo se verifica en vivo que el canal exista y tenga vista web pública.</p>
+    <button type="submit" class="btn">Verificar y agregar</button>
+  </form>
+  <form method="post" action="/configuracion/redes/sugeridos" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-small btn-ghost">Agregar los canales sugeridos que falten</button>
+  </form>
+</section>
+
 <section class="card" id="publica">
   <h2>Vista pública</h2>
   <p class="small muted">Con la vista pública activa, cualquier persona puede ver Resumen, Noticias, Grupos, Cronología, Métricas y Fuentes en solo lectura, sin iniciar sesión. Nunca se muestran notas de revisión, errores internos ni análisis de IA sin confirmar. Se aplica en unos segundos.</p>

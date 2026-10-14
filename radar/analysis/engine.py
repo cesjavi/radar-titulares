@@ -57,6 +57,7 @@ class AnalysisSummary:
     alerts: object = None
     ai: object = None
     notifications: dict = field(default_factory=dict)
+    social: object = None
 
 
 def _to_doc(a: Article, media_names: dict[int, str], recent: bool) -> Doc:

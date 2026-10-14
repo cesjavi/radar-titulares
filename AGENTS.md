@@ -34,9 +34,10 @@ app.py + vercel.json   punto de entrada y configuración para Vercel (VERCEL.md)
   alerts/      config.py, engine.py (una alerta por grupo), common_source.py
   ai/          config.py, providers.py, openai_compat.py (Groq/Fireworks), prompt.py,
                schema.py, service.py
+  social/      telegram.py (parser de t.me/s), collector.py, match.py (posteo ↔ nota)
   notify/      telegram.py          maintenance.py (backup/retención)       metrics.py
   web/         app.py, deps.py, routes/      templates/      static/
-alembic/versions/   0001 … 0007        deploy/   systemd, nginx, scripts
+alembic/versions/   0001 … 0008        deploy/   systemd, nginx, scripts
 tests/              fixtures/ (sintéticos)
 ```
 
@@ -90,6 +91,12 @@ Ver `skills.md` para la lista completa y qué hace cada una.
 - **Finales de línea en Windows:** `Path.write_text()` de Python escribe CRLF. Los scripts de `deploy/` (shell, systemd, nginx) **deben ser LF**: con CRLF, bash falla (`unexpected token $'do\r'`). Al editarlos desde Python, escribir bytes con `\n` o usar `newline="\n"`, y comprobar con `bash -n` (en WSL). `.gitattributes` fuerza LF en `deploy/`.
 - **Una base PostgreSQL vacía ya ocupa ~8 MB**, y cuesta ~7 KB por nota; el plan gratuito de Neon tiene 1 GB, así que conviene `RADAR_RETENTION_DAYS=90`.
 - **Probar contra datos reales** después de tocar el motor de coincidencias: los fixtures sintéticos no detectan falsos positivos como "estado de São Paulo" o "boca de urna".
+
+## Redes sociales
+- Solo canales públicos de Telegram por su vista web (`t.me/s/<canal>`), vía `radar/net.py`. **No** agregar scraping con login, proxies rotativos ni evasión de antibot para X, Meta o TikTok: violan sus términos y la regla de `net.py`. X en particular tiene `Disallow: /` (verificado): solo se leen las referencias a sus posteos que ya traen los mensajes de Telegram.
+- Un posteo **no es un medio independiente** (no suma a `independent_media_count`), un reenvío es una réplica y la coincidencia con una nota es léxica. No escribir que una cuenta "originó" o "coordinó" algo.
+- **Importación manual de X:** `radar/social/x_import.py` lee un JSON/CSV exportado por el usuario con [twitter-web-exporter](https://github.com/prinsss/twitter-web-exporter) (panel «Redes» → «Importar posteos de X», o `python -m radar import-x ARCHIVO`). Radar **no se conecta a X**; no automatizar el userscript ni un navegador con sesión. Las cuentas son `platform="x"`, los posteos quedan «importados a mano / sin verificar» y se vinculan con notas con el mismo motor léxico (solo últimas 72 h). Un retuit es una réplica; la hora se guarda solo si el archivo la trae.
+- `run_collection(social=...)` es opt-in (la CLI y `pipeline.collect_phase` lo activan) para no tocar las pruebas de medios. Canales por defecto: `seed_social_accounts` (una sola vez; `force` agrega los que falten).
 
 ## Estado de verificación
 Ver [PROGRESS.md](PROGRESS.md). Lo que **no** está verificado: el despliegue en el VPS, las llamadas reales a Groq/Fireworks/Anthropic y los envíos reales de Telegram.

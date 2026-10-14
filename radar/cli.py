@@ -33,11 +33,12 @@ def _read_password(args) -> str:
 
 def cmd_init_db(_args) -> int:
     from radar.db import session_scope
-    from radar.seed import seed_settings, seed_sources, seed_topics
+    from radar.seed import seed_settings, seed_social_accounts, seed_sources, seed_topics
 
     upgrade_db()
     with session_scope() as db:
-        n = seed_sources(db) + seed_topics(db) + seed_settings(db)
+        n = (seed_sources(db) + seed_topics(db) + seed_settings(db)
+             + seed_social_accounts(db))
     print(f"Base de datos lista. Registros iniciales creados: {n}.")
     return 0
 
@@ -88,7 +89,7 @@ def cmd_collect(args) -> int:
 
     try:
         summary = run_collection(only_media=args.media, force=args.force,
-                                 enrich_pages=not args.no_enrich)
+                                 enrich_pages=not args.no_enrich, social=not args.no_social)
     except CollectorBusy as exc:
         print(exc, file=sys.stderr)
         return 0
@@ -112,6 +113,12 @@ def cmd_collect(args) -> int:
           f"notas nuevas: {new}; páginas leídas: {pages}.")
     for r in errors:
         print(f"  - subfuente #{r.subsource_id}: {r.status}: {r.error}", file=sys.stderr)
+    soc = summary.social
+    if soc is not None:
+        print(f"Canales de Telegram consultados: {len(soc.outcomes)}; con problemas: "
+              f"{len(soc.errors)}; posteos nuevos: {soc.new_posts}.")
+        for o in soc.errors:
+            print(f"  - @{o.handle}: {o.status}: {o.error}", file=sys.stderr)
     # Fallo parcial no detiene el timer; fallo total devuelve código 1 para verlo en systemd.
     return 1 if runs and len(errors) == len(runs) else 0
 
@@ -123,9 +130,12 @@ def _analyze():
     from radar.analysis.engine import run_analysis
     from radar.db import session_scope
     from radar.notify import telegram
+    from radar.social.match import link_posts
 
     with session_scope() as db:
         summary = run_analysis(db)
+    with session_scope() as db:
+        summary.social = link_posts(db)  # vínculos posteo ↔ nota (sin efecto si no hay posteos)
     with session_scope() as db:
         summary.ai = run_ai(db)  # no hace nada si la IA no está activada
     with session_scope() as db:
@@ -155,6 +165,11 @@ def cmd_analyze(_args) -> int:
     a = s.alerts
     print(f"Alertas: {a.created} nuevas, {a.updated} con cambios relevantes, {a.unchanged} sin "
           f"cambios, {a.skipped} grupos sin alerta, {a.queued} avisos en cola.")
+    soc = s.social
+    if soc is not None and soc.posts:
+        print(f"Redes: {soc.posts} posteos recientes; vínculos con notas: {soc.links_new} nuevos, "
+              f"{soc.links_updated} actualizados, {soc.links_removed} retirados "
+              f"({soc.explicit} por enlace directo).")
     return 0
 
 
@@ -272,6 +287,34 @@ def cmd_restore(args) -> int:
     return 0
 
 
+def cmd_import_x(args) -> int:
+    """Importa un JSON/CSV de twitter-web-exporter y lo vincula con las notas recientes."""
+    from pathlib import Path
+
+    from radar import runtime
+    from radar.db import session_scope
+    from radar.social import x_import
+    from radar.social.match import link_posts
+
+    path = Path(args.file)
+    if not path.is_file():
+        print(f"No existe el archivo: {path}", file=sys.stderr)
+        return 1
+    try:
+        parsed = x_import.parse_export(path.read_bytes(), path.name)
+    except x_import.XImportError as exc:
+        print(f"Archivo no válido: {exc}", file=sys.stderr)
+        return 1
+    with session_scope() as db:
+        r = x_import.import_posts(db, parsed, runtime.get("social_retention_days", db))
+        links = link_posts(db)
+    print(f"{r.new} posteos nuevos, {r.updated} actualizados, {r.unchanged} sin cambios "
+          f"({r.new_accounts} cuentas nuevas). Descartados: {r.discarded}; muy viejos: {r.too_old}; "
+          f"por tope de cuentas: {r.skipped_authors}.")
+    print(f"Vínculos con notas: {links.links_new} nuevos, {links.links_updated} actualizados.")
+    return 0
+
+
 def cmd_purge(args) -> int:
     from radar.db import session_scope
     from radar.maintenance import purge
@@ -288,6 +331,7 @@ def cmd_purge(args) -> int:
     print(f"{verb}: {r.articles} notas (> {rt['retention_days']} días), {r.groups} grupos vacíos, "
           f"{r.runs} ejecuciones, {r.ai_usage} registros de IA y {r.notifications} avisos "
           f"(> {rt['runs_retention_days']} días).")
+    print(f"{verb}: {r.posts} posteos de redes (> {rt['social_retention_days']} días).")
     return 0
 
 
@@ -371,6 +415,8 @@ def main(argv: list[str] | None = None) -> int:
                    help="No leer páginas de notas (solo feeds, sitemaps y secciones)")
     p.set_defaults(func=cmd_collect)
 
+    p.add_argument("--no-social", action="store_true",
+                   help="No recolectar los canales de Telegram configurados")
     p.add_argument("--no-analyze", action="store_true",
                    help="No ejecutar el análisis de relaciones al terminar")
 
@@ -397,6 +443,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("backup")
     p.add_argument("--yes", action="store_true", help="Confirmar")
     p.set_defaults(func=cmd_restore)
+
+    p = sub.add_parser("import-x", help="Importar posteos de X exportados con twitter-web-exporter")
+    p.add_argument("file", help="Archivo JSON o CSV exportado")
+    p.set_defaults(func=cmd_import_x)
 
     p = sub.add_parser("purge", help="Aplicar la retención configurada del histórico")
     p.add_argument("--dry-run", action="store_true", help="Solo informar qué se borraría")
