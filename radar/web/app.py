@@ -7,9 +7,12 @@ import time
 from collections import defaultdict, deque
 from urllib.parse import quote
 
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import DBAPIError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -33,6 +36,16 @@ CSP = (
     "connect-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'; "
     "object-src 'none'"
 )
+log = logging.getLogger("radar.web")
+# Tabla o columna inexistente: PostgreSQL (UndefinedTable/UndefinedColumn) y SQLite.
+_OUTDATED = ("undefinedtable", "undefinedcolumn", "does not exist", "no such table",
+             "no such column")
+
+
+def schema_outdated(exc: Exception) -> bool:
+    orig = getattr(exc, "orig", None)
+    text = f"{type(orig).__name__} {orig}".lower()
+    return any(mark in text for mark in _OUTDATED)
 
 
 def create_app() -> FastAPI:
@@ -110,6 +123,22 @@ def create_app() -> FastAPI:
             {"status": exc.status_code, "title": messages.get(exc.status_code, "Error"),
              "detail": exc.detail if exc.status_code in (403, 404) else None},
             status_code=exc.status_code,
+        )
+
+    @app.exception_handler(DBAPIError)
+    async def _db_error(request: Request, exc: DBAPIError):
+        """Base con un esquema más viejo que el código (falta correr `init-db`): se explica en
+        vez de devolver un 500 opaco. Cualquier otro error de base sigue siendo un 500."""
+        log.exception("Error de base en %s", request.url.path)
+        if not schema_outdated(exc):
+            return Response("Internal Server Error", status_code=500, media_type="text/plain")
+        return render(
+            request, "error.html",
+            {"status": 503, "title": "Falta actualizar la base",
+             "detail": "La base de datos tiene un esquema más viejo que esta versión del panel. "
+                       "Hay que aplicar las migraciones con «python -m radar init-db» usando la "
+                       "conexión directa (ver VERCEL.md). Los datos no se perdieron."},
+            status_code=503,
         )
 
     @app.get("/salud", include_in_schema=False)

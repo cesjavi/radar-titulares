@@ -612,3 +612,14 @@ def test_x_import_cli(db, tmp_path, capsys):
     assert main(["import-x", str(f)]) == 0
     assert "1 posteos nuevos" in capsys.readouterr().out
     assert main(["import-x", str(tmp_path / "no_existe.json")]) == 1
+
+
+def test_outdated_schema_shows_clear_message_instead_of_500(panel, db):
+    """Código nuevo desplegado sobre una base sin la migración de redes (pasó en Vercel)."""
+    from sqlalchemy import text
+
+    for table in ("post_article_links", "social_posts", "social_accounts"):
+        db.execute(text(f"DROP TABLE {table}"))
+    db.commit()
+    r = panel.get("/configuracion")
+    assert r.status_code == 503 and "Falta actualizar la base" in r.text and "init-db" in r.text
