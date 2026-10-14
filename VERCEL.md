@@ -86,9 +86,11 @@ curl https://TU-DOMINIO/salud
 - `base: true` confirma que la función llega a Neon. `degradado` solo indica que la última recolección tiene más de 30 minutos (esperable antes de la primera).
 - Si da 500: ver los logs de la función. Los motivos habituales son `RADAR_SECRET_KEY` faltante, base sin migrar (`init-db`) o una URL de Neon incorrecta.
 
-## Recolección con Vercel Cron (solo plan Pro)
+## Recolección con Vercel Cron
 
-Agregá `crons` a `vercel.json`. El trabajo se reparte para que cada invocación entre en `maxDuration`:
+**Plan Hobby (configurado en `vercel.json`):** un ciclo diario. Hobby admite crons de una vez por día y los dispara en cualquier momento dentro de la hora indicada (±59 min), por eso cada tarea va en una hora distinta (UTC; 10:00 UTC = 7:00 de Buenos Aires): Perfil 10, Infobae 11, Página/12 12, El Destape 13, redes 14, análisis 15 y mantenimiento 16. Si dos se superponen, el bloqueo hace que la segunda responda "omitido". Con una sola pasada por día, los feeds que solo listan las últimas notas pueden no traer todo lo publicado en el día.
+
+**Plan Pro:** reemplazá esos horarios por los de abajo. El trabajo se reparte para que cada invocación entre en `maxDuration`:
 
 ```json
 "crons": [

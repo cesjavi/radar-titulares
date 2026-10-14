@@ -5,5 +5,14 @@
       "maxDuration": 300,
       "excludeFiles": "{.venv*/**,data/**,tests/**,deploy/**,alembic/**,prompt*,*.md,.env*,.claude/**,.pytest_cache/**}"
     }
-  }
+  },
+  "crons": [
+    { "path": "/api/cron?tarea=recolectar&media=perfil",    "schedule": "0 10 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=infobae",   "schedule": "0 11 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=pagina12",  "schedule": "0 12 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=eldestape", "schedule": "0 13 * * *" },
+    { "path": "/api/cron?tarea=redes",                      "schedule": "0 14 * * *" },
+    { "path": "/api/cron?tarea=analizar",                   "schedule": "0 15 * * *" },
+    { "path": "/api/cron?tarea=mantenimiento",              "schedule": "0 16 * * *" }
+  ]
 }
