@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Sentimiento y Tono · Radar de Titulares{% endblock %}
+{% block content %}
+<div class="sentiment-page">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">📊 Sentimiento y Tono Editorial</h1>
+      <p class="muted small">
+        Análisis automatizado con IA del tono y enfoque de cada medio hacia los sujetos de las noticias agrupadas.
+        Lectura sin verificar: no prueba sesgo, intencionalidad ni coordinación. La revisión humana tiene la última palabra.
+      </p>
+    </div>
+  </div>
+
+  <div class="stats stats-sentiment">
+    <div class="stat stat-sentiment-item">
+      <span class="stat-value text-favorable">{{ counts.favorable }}</span>
+      <span class="stat-label">🟢 Tono Favorable</span>
+    </div>
+    <div class="stat stat-sentiment-item">
+      <span class="stat-value text-critico">{{ counts.critico }}</span>
+      <span class="stat-label">🔴 Tono Crítico</span>
+    </div>
+    <div class="stat stat-sentiment-item">
+      <span class="stat-value text-neutral">{{ counts.neutral }}</span>
+      <span class="stat-label">⚪ Tono Neutral</span>
+    </div>
+    <div class="stat stat-sentiment-item {{ 'stat-warn' if counts.opuesto > 0 }}">
+      <span class="stat-value">{{ counts.opuesto }}</span>
+      <span class="stat-label">⚠️ Enfoques Opuestos</span>
+    </div>
+  </div>
+
+  <form method="get" action="/sentimiento" class="filters">
+    <label>Valoración
+      <select name="valoracion">
+        <option value="">Todas</option>
+        <option value="favorable" {{ 'selected' if sel_valoracion == 'favorable' }}>Favorable</option>
+        <option value="critico" {{ 'selected' if sel_valoracion == 'critico' }}>Crítico</option>
+        <option value="neutral" {{ 'selected' if sel_valoracion == 'neutral' }}>Neutral</option>
+        <option value="opuesto" {{ 'selected' if sel_valoracion == 'opuesto' }}>Grupos con enfoque opuesto</option>
+      </select>
+    </label>
+    <label>Medio
+      <select name="media">
+        <option value="">Todos</option>
+        {% for m in media_options %}
+        <option value="{{ m.slug }}" {{ 'selected' if sel_media == m.slug }}>{{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn">Filtrar</button>
+    {% if sel_valoracion or sel_media %}
+    <a href="/sentimiento" class="btn btn-ghost">Limpiar</a>
+    {% endif %}
+  </form>
+
+  {% if opposed_groups %}
+  <section class="card card-accent-warn">
+    <div class="card-head">
+      <h2>⚠️ Grupos con Enfoques Opuestos o Discrepancias Significativas</h2>
+      <span class="badge badge-opuesto">{{ opposed_groups | length }} caso{{ 's' if opposed_groups | length != 1 }}</span>
+    </div>
+    <p class="small muted">Casos donde los medios informaron sobre el mismo hecho pero con enfoques contrapuestos o valoraciones opuestas.</p>
+    <div class="grid-2">
+      {% for g in opposed_groups %}
+      <div class="group-card-mini">
+        <div class="group-card-header">
+          <a class="headline" href="/grupos/{{ g.id }}">{{ g.title }}</a>
+        </div>
+        <div class="media-pills">
+          {% for m in g.media_list %}
+          <span class="media-tag media-tag-{{ m.slug }}">{{ m.name }}</span>
+          {% endfor %}
+        </div>
+        {% if g.flags %}
+        <ul class="small alert-warn-list">
+          {% for f in g.flags[:2] %}
+          <li>{{ f }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        <div class="small" style="margin-top: 8px;">
+          <a href="/grupos/{{ g.id }}" class="btn btn-small btn-ghost">Ver análisis detallado →</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Registro de Tono por Nota y Sujeto</h2>
+      <span class="small muted">{{ items | length }} registro{{ 's' if items | length != 1 }}</span>
+    </div>
+    {% if items %}
+    <table class="table responsive">
+      <thead>
+        <tr>
+          <th>Medio</th>
+          <th>Sujeto</th>
+          <th>Valoración</th>
+          <th>Titular</th>
+          <th>Evidencia textual</th>
+          <th>Grupo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for it in items %}
+        <tr>
+          <td data-label="Medio">
+            <span class="media-tag media-tag-{{ it.media_slug }}">{{ it.media_name }}</span>
+          </td>
+          <td data-label="Sujeto">
+            <strong>{{ it.sujeto or 'No especificado' }}</strong>
+          </td>
+          <td data-label="Valoración">
+            <span class="badge badge-sentiment-{{ it.valoracion }}">{{ it.valoracion | capitalize }}</span>
+          </td>
+          <td data-label="Titular">
+            {% if it.article_id %}
+            <a href="/noticias/{{ it.article_id }}" class="headline small">{{ it.title }}</a>
+            {% else %}
+            <span class="small">{{ it.title }}</span>
+            {% endif %}
+          </td>
+          <td data-label="Evidencia" class="small muted">
+            {% if it.fragmento %}
+            “{{ it.fragmento }}”
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td data-label="Grupo">
+            {% if it.group_id %}
+            <a href="/grupos/{{ it.group_id }}" class="small">Grupo #{{ it.group_id }}</a>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      <p class="muted">No hay análisis de sentimiento que coincidan con los filtros.</p>
+      <p class="small muted">
+        El análisis de sentimiento se genera al analizar grupos de noticias con IA desde la vista de cada grupo (opcional).
+        Podés ingresar a <a href="/grupos">Grupos</a> para analizarlos.
+      </p>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

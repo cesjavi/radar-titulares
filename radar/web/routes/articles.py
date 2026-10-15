@@ -5,7 +5,7 @@ import math
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from radar.analysis.relations import TYPE_LABELS
@@ -42,6 +42,8 @@ def article_list(
     periodo: str = Query("", max_length=8),
     autor: str = Query("", max_length=16),
     relacionadas: bool = Query(False),
+    min_clicks: int = Query(0, ge=0),
+    orden: str = Query("recientes", max_length=16),
     db: Session = Depends(get_db),
     user: User = Depends(viewer),
 ):
@@ -59,6 +61,8 @@ def article_list(
     if relacionadas:
         related = select(ArticleRelation.article_a_id).union(select(ArticleRelation.article_b_id))
         stmt = stmt.where(Article.id.in_(related))
+    if min_clicks > 0:
+        stmt = stmt.where(Article.clicks >= min_clicks)
     if media:
         stmt = stmt.join(Media).where(Media.slug == media)
     selected_topic = None
@@ -75,9 +79,16 @@ def article_list(
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     pages = max(1, math.ceil(total / PER_PAGE))
     page = min(page, pages)
+    
+    order_clause = (
+        [Article.clicks.desc(), Article.first_seen_at.desc(), Article.id.desc()]
+        if orden == "clicks"
+        else [Article.first_seen_at.desc(), Article.id.desc()]
+    )
+
     rows = db.scalars(
         stmt.options(selectinload(Article.media))
-        .order_by(Article.first_seen_at.desc(), Article.id.desc())
+        .order_by(*order_clause)
         .offset((page - 1) * PER_PAGE)
         .limit(PER_PAGE)
     ).all()
@@ -97,7 +108,8 @@ def article_list(
         "media_warning": media_warning,
         "articles": rows, "total": total, "page": page, "pages": pages,
         "filters": {"media": media, "topic": topic, "q": q, "seccion": seccion,
-                    "periodo": periodo, "autor": autor, "relacionadas": relacionadas},
+                    "periodo": periodo, "autor": autor, "relacionadas": relacionadas,
+                    "min_clicks": min_clicks, "orden": orden},
         "section_options": [s for s in db.scalars(
             select(Article.section).where(Article.section.is_not(None))
             .group_by(Article.section).order_by(func.count().desc()).limit(40))],
@@ -107,6 +119,15 @@ def article_list(
     }
     template = "partials/article_table.html" if request.headers.get("hx-request") else "articles.html"
     return render(request, template, ctx, user=user)
+
+
+@router.post("/noticias/{article_id}/click")
+def register_article_click(article_id: int, db: Session = Depends(get_db)):
+    db.execute(
+        update(Article).where(Article.id == article_id).values(clicks=Article.clicks + 1)
+    )
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/noticias/{article_id}")
@@ -123,6 +144,12 @@ def article_detail(
     )
     if article is None or (article.is_demo and not demo_visible(request)):
         raise HTTPException(status_code=404, detail="La noticia no existe.")
+
+    # Incrementar contador de clicks al ver la noticia
+    db.execute(
+        update(Article).where(Article.id == article.id).values(clicks=Article.clicks + 1)
+    )
+    db.commit()
 
     relations = db.scalars(
         select(ArticleRelation).where(

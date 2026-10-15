@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Request
@@ -7,7 +8,18 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from radar.config import get_settings
-from radar.models import Alert, Article, CollectionRun, Media, Subsource, Topic, User
+from radar.models import (
+    AiGroupAnalysis,
+    Alert,
+    Article,
+    CollectionRun,
+    Media,
+    StoryGroup,
+    StoryGroupMember,
+    Subsource,
+    Topic,
+    User,
+)
 from radar.web.routes.alerts_routes import PRIORITY_ORDER, _alert_scope
 from radar.queries import topic_condition, visible_articles
 from radar.sources_status import STATE_LABELS, media_health
@@ -17,10 +29,89 @@ from radar.web.deps import demo_visible, get_db, is_public, render, viewer
 router = APIRouter()
 
 
+def _json(value: str | None, default):
+    try:
+        return json.loads(value) if value else default
+    except ValueError:
+        return default
+
+
 @router.get("/")
 def summary(request: Request, db: Session = Depends(get_db), user: User = Depends(viewer)):
     demo = demo_visible(request)
     since = utcnow() - timedelta(hours=24)
+
+    # Grupos coordinados destacados (núcleo de la app)
+    group_stmt = (
+        select(StoryGroup)
+        .options(
+            selectinload(StoryGroup.members)
+            .selectinload(StoryGroupMember.article)
+            .selectinload(Article.media)
+        )
+        .where(StoryGroup.status == "open", StoryGroup.article_count >= 1)
+    )
+    if not demo:
+        demo_groups = (
+            select(StoryGroupMember.group_id).join(Article).where(Article.is_demo.is_(True))
+        )
+        group_stmt = group_stmt.where(StoryGroup.id.not_in(demo_groups))
+
+    featured_raw = db.scalars(
+        group_stmt.order_by(
+            StoryGroup.independent_media_count.desc(),
+            StoryGroup.first_seen_at.desc(),
+        ).limit(6)
+    ).all()
+
+    gids = [g.id for g in featured_raw]
+    ai_analyses = {}
+    if gids:
+        ai_rows = db.scalars(
+            select(AiGroupAnalysis)
+            .where(AiGroupAnalysis.group_id.in_(gids), AiGroupAnalysis.status == "ok")
+            .order_by(AiGroupAnalysis.created_at.desc())
+        ).all()
+        for ai_obj in ai_rows:
+            if ai_obj.group_id not in ai_analyses:
+                ai_analyses[ai_obj.group_id] = ai_obj
+
+    featured_groups = []
+    for g in featured_raw:
+        common = _json(g.common_terms, {})
+        media_list = []
+        seen_slugs = set()
+        for m in g.members:
+            if m.status == "activo" and m.article and m.article.media:
+                if m.article.media.slug not in seen_slugs:
+                    media_list.append(m.article.media)
+                    seen_slugs.add(m.article.media.slug)
+
+        ai_obj = ai_analyses.get(g.id)
+        sentiment_info = None
+        if ai_obj:
+            res = _json(ai_obj.result, {})
+            enfoque = res.get("enfoque")
+            tones = res.get("tono_por_nota", [])
+            has_fav = any(t.get("valoracion") == "favorable" for t in tones)
+            has_crit = any(t.get("valoracion") == "critico" for t in tones)
+            if enfoque == "opuesto" or (has_fav and has_crit):
+                sentiment_info = {"tipo": "opuesto", "label": "Enfoques opuestos ⚠️"}
+            elif enfoque == "diferente":
+                sentiment_info = {"tipo": "diferente", "label": "Enfoques distintos"}
+            elif tones:
+                main_val = tones[0].get("valoracion", "")
+                if main_val in ("favorable", "critico", "neutral"):
+                    sentiment_info = {"tipo": main_val, "label": f"Tono {main_val}"}
+
+        featured_groups.append((g, common, media_list, sentiment_info))
+
+    total_groups = db.scalar(
+        select(func.count(StoryGroup.id)).where(StoryGroup.status == "open")
+    ) or 0
+    total_ai_analyses = db.scalar(
+        select(func.count(AiGroupAnalysis.id)).where(AiGroupAnalysis.status == "ok")
+    ) or 0
 
     media_filter = [] if demo else [Media.is_demo.is_(False)]
     per_media = db.execute(
@@ -44,14 +135,14 @@ def summary(request: Request, db: Session = Depends(get_db), user: User = Depend
         visible_articles(demo)
         .options(selectinload(Article.media))
         .order_by(Article.first_seen_at.desc())
-        .limit(12)
+        .limit(10)
     ).all()
 
     runs = db.scalars(
         select(CollectionRun)
         .options(selectinload(CollectionRun.subsource).selectinload(Subsource.media))
         .order_by(CollectionRun.started_at.desc())
-        .limit(8)
+        .limit(6)
     ).all()
 
     failing = db.scalar(
@@ -60,7 +151,7 @@ def summary(request: Request, db: Session = Depends(get_db), user: User = Depend
             (Subsource.consecutive_failures > 0) | (Subsource.last_status == "blocked"),
         )
     ) or 0
-    # Logueados: alertas pendientes. Visitantes: solo las publicables (revisadas por defecto).
+
     def scope(stmt):
         stmt = _alert_scope(stmt, request)
         return stmt if is_public(request) else stmt.where(Alert.status == "pendiente")
@@ -70,11 +161,14 @@ def summary(request: Request, db: Session = Depends(get_db), user: User = Depend
                                  .group_by(Alert.priority)).all())
     top_alerts = sorted(db.scalars(scope(select(Alert)).order_by(Alert.created_at.desc())
                                    .limit(30)).all(),
-                        key=lambda a: PRIORITY_ORDER.get(a.priority, 9))[:6]
+                        key=lambda a: PRIORITY_ORDER.get(a.priority, 9))[:5]
     total = db.scalar(select(func.count()).select_from(visible_articles(demo).subquery())) or 0
     last_ok = db.scalar(select(func.max(Subsource.last_success_at)))
 
     return render(request, "summary.html", {
+        "featured_groups": featured_groups,
+        "total_groups": total_groups,
+        "total_ai_analyses": total_ai_analyses,
         "per_media": per_media, "per_topic": per_topic, "latest": latest, "runs": runs,
         "failing": failing, "new_alerts": new_alerts, "total": total, "nav": "resumen",
         "health": media_health(db, demo), "labels": STATE_LABELS,

@@ -18,32 +18,53 @@
   {% endif %}
   {% if user %}
   <header class="topbar">
-    <a class="brand" href="/">Radar de Titulares</a>
+    <div class="topbar-brand-section">
+      <a class="brand" href="/">
+        <span class="brand-radar-icon">📡</span>
+        <span class="brand-text">Radar de Titulares</span>
+      </a>
+    </div>
     <input type="checkbox" id="nav-toggle" class="nav-toggle" aria-label="Menú">
     <label for="nav-toggle" class="nav-toggle-label" aria-hidden="true">☰</label>
     <nav class="nav">
-      <a href="/" class="{{ 'active' if nav == 'resumen' }}">Resumen</a>
-      {% if not user.is_anonymous or public_alerts != 'ninguna' %}<a href="/alertas" class="{{ 'active' if nav == 'alertas' }}">Alertas</a>{% endif %}
-      <a href="/noticias" class="{{ 'active' if nav == 'noticias' }}">Noticias</a>
-      <a href="/grupos" class="{{ 'active' if nav == 'grupos' }}">Grupos</a>
-      <a href="/cronologia" class="{{ 'active' if nav == 'cronologia' }}">Cronología</a>
-      {% if not user.is_anonymous %}<a href="/redes" class="{{ 'active' if nav == 'redes' }}">Redes</a>{% endif %}
-      {% if not user.is_anonymous %}
-      <a href="/revision" class="{{ 'active' if nav == 'revision' }}">Revisión</a>
-      <a href="/historial" class="{{ 'active' if nav == 'historial' }}">Historial</a>
-      {% endif %}
-      <a href="/metricas" class="{{ 'active' if nav == 'metricas' }}">Métricas</a>
-      <a href="/fuentes" class="{{ 'active' if nav == 'fuentes' }}">Fuentes</a>
-      {% if not user.is_anonymous %}<a href="/ejecuciones" class="{{ 'active' if nav == 'ejecuciones' }}">Ejecuciones</a>{% endif %}
-      {% if user.is_admin %}<a href="/configuracion" class="{{ 'active' if nav == 'configuracion' }}">Configuración</a>{% endif %}
-      {% if user.is_anonymous %}
-      <a href="/login" class="nav-login">Ingresar</a>
-      {% else %}
-      <form method="post" action="/logout" class="logout">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="link">Salir ({{ user.username }})</button>
-      </form>
-      {% endif %}
+      <div class="nav-primary">
+        <a href="/" class="nav-link {{ 'active' if nav == 'resumen' }}">Inicio</a>
+        <a href="/grupos" class="nav-link {{ 'active' if nav == 'grupos' }}">🎯 Grupos</a>
+        <a href="/sentimiento" class="nav-link {{ 'active' if nav == 'sentimiento' }}">📊 Sentimiento</a>
+        <a href="/noticias" class="nav-link {{ 'active' if nav == 'noticias' }}">📰 Noticias</a>
+        {% if not user.is_anonymous or public_alerts != 'ninguna' %}
+        <a href="/alertas" class="nav-link {{ 'active' if nav == 'alertas' }}">⚡ Alertas</a>
+        {% endif %}
+      </div>
+
+      <div class="nav-secondary">
+        <div class="nav-dropdown">
+          <button class="nav-dropdown-btn {{ 'active' if nav in ('cronologia', 'redes', 'revision', 'historial', 'metricas', 'fuentes', 'ejecuciones', 'configuracion') }}" type="button">
+            Herramientas ▾
+          </button>
+          <div class="nav-dropdown-menu">
+            <a href="/cronologia" class="{{ 'active' if nav == 'cronologia' }}">⏱️ Cronología</a>
+            {% if not user.is_anonymous %}<a href="/redes" class="{{ 'active' if nav == 'redes' }}">💬 Redes</a>{% endif %}
+            {% if not user.is_anonymous %}
+            <a href="/revision" class="{{ 'active' if nav == 'revision' }}">✍️ Revisión</a>
+            <a href="/historial" class="{{ 'active' if nav == 'historial' }}">📜 Historial</a>
+            {% endif %}
+            <a href="/metricas" class="{{ 'active' if nav == 'metricas' }}">📈 Métricas</a>
+            <a href="/fuentes" class="{{ 'active' if nav == 'fuentes' }}">🌐 Fuentes</a>
+            {% if not user.is_anonymous %}<a href="/ejecuciones" class="{{ 'active' if nav == 'ejecuciones' }}">⚙️ Ejecuciones</a>{% endif %}
+            {% if user.is_admin %}<a href="/configuracion" class="{{ 'active' if nav == 'configuracion' }}">🔧 Configuración</a>{% endif %}
+          </div>
+        </div>
+
+        {% if user.is_anonymous %}
+        <a href="/login" class="nav-login">Ingresar</a>
+        {% else %}
+        <form method="post" action="/logout" class="logout">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="link logout-btn" title="Cerrar sesión">Salir ({{ user.username }})</button>
+        </form>
+        {% endif %}
+      </div>
     </nav>
   </header>
   {% endif %}

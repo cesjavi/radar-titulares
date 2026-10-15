@@ -36,6 +36,21 @@
       <option value="sin_autor" {{ 'selected' if filters.autor == 'sin_autor' }}>⚪ Sin firma (redacción/agencia)</option>
     </select>
   </label>
+  <label>Clicks
+    <select name="min_clicks">
+      <option value="0">Todos</option>
+      <option value="1" {{ 'selected' if filters.min_clicks == 1 }}>1+ clicks</option>
+      <option value="5" {{ 'selected' if filters.min_clicks == 5 }}>5+ clicks</option>
+      <option value="10" {{ 'selected' if filters.min_clicks == 10 }}>10+ clicks</option>
+      <option value="25" {{ 'selected' if filters.min_clicks == 25 }}>25+ clicks</option>
+    </select>
+  </label>
+  <label>Orden
+    <select name="orden">
+      <option value="recientes" {{ 'selected' if filters.orden == 'recientes' }}>Más recientes</option>
+      <option value="clicks" {{ 'selected' if filters.orden == 'clicks' }}>Más clickeadas 🔥</option>
+    </select>
+  </label>
   <label class="inline"><input type="checkbox" name="relacionadas" value="true" {{ 'checked' if filters.relacionadas }}> Solo con coincidencias</label>
   <label class="grow">Buscar en titular, bajada y autor
     <input type="search" name="q" value="{{ filters.q }}" maxlength="200" placeholder="p. ej. inflación o apellido de autor">

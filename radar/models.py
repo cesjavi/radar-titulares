@@ -157,6 +157,7 @@ class Article(Base):
     enrich_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     enrich_error: Mapped[str | None] = mapped_column(Text)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    clicks: Mapped[int] = mapped_column(Integer, default=0, server_default="0", index=True)
 
     media: Mapped[Media] = relationship()
     subsource: Mapped[Subsource | None] = relationship()

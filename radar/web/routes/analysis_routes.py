@@ -28,9 +28,11 @@ from radar.config import get_settings
 from radar.queries import title_condition
 from radar.models import (
     AiAnalysis,
+    AiGroupAnalysis,
     Article,
     ArticleRelation,
     ManualReview,
+    Media,
     StoryGroup,
     StoryGroupMember,
     User,
@@ -98,9 +100,58 @@ def group_list(request: Request, q: str = Query("", max_length=100),
         stmt = stmt.where(StoryGroup.id.not_in(demo_groups))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     pages = max(1, math.ceil(total / PER_PAGE))
-    groups = db.scalars(stmt.order_by(*order, StoryGroup.id.desc())
-                        .offset((min(page, pages) - 1) * PER_PAGE).limit(PER_PAGE)).all()
-    rows = [(g, _json(g.common_terms, {})) for g in groups]
+    groups = db.scalars(
+        stmt.options(
+            selectinload(StoryGroup.members)
+            .selectinload(StoryGroupMember.article)
+            .selectinload(Article.media)
+        )
+        .order_by(*order, StoryGroup.id.desc())
+        .offset((min(page, pages) - 1) * PER_PAGE)
+        .limit(PER_PAGE)
+    ).all()
+    gids = [g.id for g in groups]
+    ai_analyses = {}
+    if gids:
+        ai_rows = db.scalars(
+            select(AiGroupAnalysis)
+            .where(AiGroupAnalysis.group_id.in_(gids), AiGroupAnalysis.status == "ok")
+            .order_by(AiGroupAnalysis.created_at.desc())
+        ).all()
+        for ai_obj in ai_rows:
+            if ai_obj.group_id not in ai_analyses:
+                ai_analyses[ai_obj.group_id] = ai_obj
+
+    rows = []
+    for g in groups:
+        common = _json(g.common_terms, {})
+        media_list = []
+        seen_slugs = set()
+        for m in g.members:
+            if m.status == "activo" and m.article and m.article.media:
+                if m.article.media.slug not in seen_slugs:
+                    media_list.append(m.article.media)
+                    seen_slugs.add(m.article.media.slug)
+
+        ai_obj = ai_analyses.get(g.id)
+        sentiment_info = None
+        if ai_obj:
+            res = _json(ai_obj.result, {})
+            enfoque = res.get("enfoque")
+            tones = res.get("tono_por_nota", [])
+            has_fav = any(t.get("valoracion") == "favorable" for t in tones)
+            has_crit = any(t.get("valoracion") == "critico" for t in tones)
+            if enfoque == "opuesto" or (has_fav and has_crit):
+                sentiment_info = {"tipo": "opuesto", "label": "Enfoques opuestos ⚠️"}
+            elif enfoque == "diferente":
+                sentiment_info = {"tipo": "diferente", "label": "Enfoques distintos"}
+            elif tones:
+                main_val = tones[0].get("valoracion", "")
+                if main_val in ("favorable", "critico", "neutral"):
+                    sentiment_info = {"tipo": main_val, "label": f"Tono {main_val}"}
+
+        rows.append((g, common, media_list, sentiment_info))
+
     return render(request, "groups.html", {"rows": rows, "page": min(page, pages), "pages": pages,
                                            "total": total, "nav": "grupos",
                                            "q": q, "min_medios": min_medios, "corregidos": corregidos,
@@ -287,3 +338,148 @@ def group_merge(group_id: int, other_id: int = Form(...), note: str = Form("", m
         return RedirectResponse(f"/grupos/{group_id}?error={quote('El otro grupo no existe.')}",
                                 status_code=303)
     return _group_action(group_id, db, lambda g: merge_groups(db, g, other, user, note))
+
+
+@router.get("/sentimiento")
+def sentiment_dashboard(
+    request: Request,
+    valoracion: str = Query("", max_length=16),
+    media: str = Query("", max_length=64),
+    db: Session = Depends(get_db),
+    user: User = Depends(viewer),
+):
+    demo = demo_visible(request)
+    group_analyses = db.scalars(
+        select(AiGroupAnalysis)
+        .where(AiGroupAnalysis.status == "ok")
+        .order_by(AiGroupAnalysis.created_at.desc())
+        .limit(100)
+    ).all()
+
+    all_article_ids = set()
+    for ga in group_analyses:
+        aids = _json(ga.article_ids, [])
+        all_article_ids.update(aids)
+
+    articles_map = {}
+    if all_article_ids:
+        arts = db.scalars(
+            select(Article)
+            .options(selectinload(Article.media))
+            .where(Article.id.in_(all_article_ids))
+        ).all()
+        articles_map = {a.id: a for a in arts}
+
+    group_ids = {ga.group_id for ga in group_analyses}
+    groups_map = {}
+    if group_ids:
+        grps = db.scalars(
+            select(StoryGroup)
+            .options(
+                selectinload(StoryGroup.members)
+                .selectinload(StoryGroupMember.article)
+                .selectinload(Article.media)
+            )
+            .where(StoryGroup.id.in_(group_ids))
+        ).all()
+        groups_map = {g.id: g for g in grps}
+
+    counts = {"favorable": 0, "critico": 0, "neutral": 0, "opuesto": 0}
+    items = []
+    opposed_groups = []
+
+    for ga in group_analyses:
+        grp = groups_map.get(ga.group_id)
+        if grp and not demo:
+            if any(m.article.is_demo for m in grp.members if m.article):
+                continue
+
+        res = _json(ga.result, {})
+        flags = _json(ga.flags, [])
+        enfoque = res.get("enfoque")
+        tones = res.get("tono_por_nota", [])
+        aids = _json(ga.article_ids, [])
+
+        is_opposed = (enfoque == "opuesto") or (
+            any(t.get("valoracion") == "favorable" for t in tones)
+            and any(t.get("valoracion") == "critico" for t in tones)
+        )
+        if is_opposed:
+            counts["opuesto"] += 1
+            if grp:
+                media_list = []
+                seen_slugs = set()
+                for m in grp.members:
+                    if m.status == "activo" and m.article and m.article.media:
+                        if m.article.media.slug not in seen_slugs:
+                            media_list.append(m.article.media)
+                            seen_slugs.add(m.article.media.slug)
+                opposed_groups.append({
+                    "id": grp.id,
+                    "title": grp.title,
+                    "media_list": media_list,
+                    "flags": flags,
+                })
+
+        for t in tones:
+            val = t.get("valoracion", "incierto")
+            if val in counts:
+                counts[val] += 1
+
+            letter = t.get("articulo")
+            art = None
+            if letter and len(letter) == 1 and "A" <= letter <= "Z":
+                idx = ord(letter) - 65
+                if 0 <= idx < len(aids):
+                    art = articles_map.get(aids[idx])
+
+            if art and not demo and art.is_demo:
+                continue
+
+            media_obj = art.media if art else None
+            m_slug = media_obj.slug if media_obj else ""
+            m_name = media_obj.name if media_obj else "Desconocido"
+
+            item = {
+                "group_id": ga.group_id,
+                "article_id": art.id if art else None,
+                "title": art.title if art else (grp.title if grp else "Nota"),
+                "media_slug": m_slug,
+                "media_name": m_name,
+                "sujeto": t.get("sujeto", ""),
+                "valoracion": val,
+                "fragmento": t.get("fragmento", ""),
+                "is_opposed": is_opposed,
+            }
+
+            if valoracion:
+                if valoracion == "opuesto":
+                    if not is_opposed:
+                        continue
+                elif val != valoracion:
+                    continue
+
+            if media and m_slug != media:
+                continue
+
+            items.append(item)
+
+    media_q = select(Media).where(Media.enabled.is_(True)).order_by(Media.is_demo, Media.name)
+    if not demo:
+        media_q = media_q.where(Media.is_demo.is_(False))
+    media_options = db.scalars(media_q).all()
+
+    return render(
+        request,
+        "sentiment.html",
+        {
+            "counts": counts,
+            "items": items,
+            "opposed_groups": opposed_groups,
+            "media_options": media_options,
+            "sel_valoracion": valoracion,
+            "sel_media": media,
+            "nav": "sentimiento",
+        },
+        user=user,
+    )

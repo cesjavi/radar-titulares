@@ -35,3 +35,8 @@ prompt*.txt
 
 # archivos de macos:
 .DS_Store
+
+# IDE y agentes locales
+.agents/
+.claude/
+skills-lock.json

@@ -1,80 +1,225 @@
 {% extends "base.html" %}
-{% block title %}Resumen · Radar de Titulares{% endblock %}
+{% block title %}Radar de Titulares — Detección de Cobertura y Sentimiento{% endblock %}
 {% block content %}
 <div id="resumen" hx-get="/" hx-trigger="every 120s" hx-select="#resumen" hx-target="this" hx-swap="outerHTML">
-<h1>Resumen</h1>
-<p class="small muted">Última recolección exitosa: <strong>{{ last_ok | local_dt }}</strong> · pantalla actualizada a las {{ loaded_at | local_dt }} (se refresca sola cada 2 minutos) · <a href="/">Actualizar ahora</a></p>
-
-<div class="stats">
-  <div class="stat"><span class="stat-value">{{ total }}</span><span class="stat-label">Noticias registradas</span></div>
-{% if not (public_view and public_alerts == 'ninguna') %}
-  <a class="stat" href="/alertas"><span class="stat-value">{{ new_alerts }}</span><span class="stat-label">{{ 'Alertas publicadas' if public_view else 'Alertas pendientes' }} · alta {{ alert_prio.get('alta', 0) }} · media {{ alert_prio.get('media', 0) }} · baja {{ alert_prio.get('baja', 0) }}</span></a>
-  {% endif %}
-  <div class="stat {{ 'stat-warn' if failing }}"><span class="stat-value">{{ failing }}</span><span class="stat-label">Subfuentes con errores</span></div>
-</div>
-
-{% if top_alerts %}
-<section class="card">
-  <h2>{{ 'Alertas revisadas' if public_view else 'Alertas para revisar primero' }}</h2>
-  <ul>{% for a in top_alerts %}<li><span class="badge prio-{{ a.priority }}">{{ a.priority }}</span> <a href="/alertas/{{ a.id }}">{{ a.title }}</a> <span class="small muted">· {{ a.independent_media_count }} medios</span></li>{% endfor %}</ul>
-  <p class="small muted">La prioridad indica qué revisar primero; no significa falsedad ni coordinación.</p>
-</section>
-{% endif %}
-
-<div class="grid-2">
-  <section class="card">
-    <h2>Detectadas en las últimas 24 h por medio</h2>
-    <table class="table compact">
-      <tbody>
-      {% for m, n in per_media %}
-        {% set st = health.get(m.id, 'operativa') %}
-        <tr><td><a href="/noticias?media={{ m.slug }}">{{ m.name }}</a>{% if m.is_demo %} <span class="badge badge-demo">DEMO</span>{% endif %}
-          {% if st not in ('operativa', 'sin_consultar') %} <a href="/fuentes" class="badge state-{{ st }}">{{ labels[st] }}</a>{% endif %}</td>
-          <td class="num">{% if n == 0 and st in ('caida', 'bloqueada') %}<span class="error-text" title="La recolección falló: no se puede afirmar que no haya noticias">sin datos</span>{% else %}{{ n }}{% endif %}</td></tr>
-      {% else %}
-        <tr><td class="muted">Sin medios configurados. Ejecutá <code>python -m radar init-db</code>.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </section>
-  <section class="card">
-    <h2>Temas de seguimiento (últimas 24 h)</h2>
-    <table class="table compact">
-      <tbody>
-      {% for t, n in per_topic %}
-        <tr><td><a href="/noticias?topic={{ t.slug }}">{{ t.name }}</a></td><td class="num">{{ n }}</td></tr>
-      {% else %}
-        <tr><td class="muted">No hay temas activos.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
-  </section>
-</div>
-
-<section class="card">
-  <h2>Últimas detectadas</h2>
-  <div class="legend-bar small" style="margin-bottom: 10px;">
-    <span class="legend-title">Autoría:</span>
-    <span class="badge badge-author-has">✍️ Con autor (nota firmada)</span>
-    <span class="badge badge-author-none">⚪ Sin firma (redacción / agencia)</span>
+  <div class="dashboard-hero">
+    <div class="hero-content">
+      <h1 class="hero-title">Radar de Titulares</h1>
+      <p class="hero-subtitle">
+        Monitoreo en tiempo real de medios argentinos: detección de <strong>grupos de noticias coordinadas</strong> por coincidencias léxicas y análisis de <strong>sentimiento y tono editorial</strong>.
+      </p>
+    </div>
+    <div class="hero-status small muted">
+      Última recolección exitosa: <strong>{{ last_ok | local_dt }}</strong> · pantalla actualizada a las {{ loaded_at | local_dt }} (se refresca sola cada 2 minutos) · <a href="/" class="link">Actualizar ahora ↻</a>
+    </div>
   </div>
-  {% if latest %}
-  <table class="table responsive">
-    <thead><tr><th>Medio</th><th>Titular</th><th>Publicada</th><th>Detectada</th></tr></thead>
-    <tbody>{% for a in latest %}{% include "partials/article_row.html" %}{% endfor %}</tbody>
-  </table>
-  <p><a href="/noticias">Ver todas →</a></p>
-  {% else %}
-  <p class="muted">Todavía no hay noticias. Ejecutá <code>python -m radar collect</code>.</p>
-  {% endif %}
-</section>
 
-{% if not public_view %}
-<section class="card">
-  <h2>Últimas ejecuciones de recolección</h2>
-  {% include "partials/runs_table.html" %}
-  <p><a href="/fuentes">Estado de fuentes →</a></p>
-</section>
-{% endif %}
+  <div class="stats stats-hero">
+    <a class="stat stat-primary" href="/grupos">
+      <span class="stat-value">{{ total_groups }}</span>
+      <span class="stat-label">🎯 Grupos coordinados</span>
+    </a>
+    <a class="stat" href="/sentimiento">
+      <span class="stat-value">{{ total_ai_analyses }}</span>
+      <span class="stat-label">📊 Análisis de sentimiento</span>
+    </a>
+    <a class="stat" href="/noticias">
+      <span class="stat-value">{{ total }}</span>
+      <span class="stat-label">📰 Noticias registradas</span>
+    </a>
+    {% if not (public_view and public_alerts == 'ninguna') %}
+    <a class="stat {{ 'stat-warn' if new_alerts > 0 }}" href="/alertas">
+      <span class="stat-value">{{ new_alerts }}</span>
+      <span class="stat-label">{{ 'Alertas publicadas' if public_view else 'Alertas pendientes' }}</span>
+    </a>
+    {% endif %}
+    {% if failing > 0 and not public_view %}
+    <a class="stat stat-warn" href="/fuentes">
+      <span class="stat-value">{{ failing }}</span>
+      <span class="stat-label">Fuentes con fallas</span>
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- SECCIÓN PRINCIPAL: Detección de Grupos de Noticias Coordinadas -->
+  <section class="card card-featured">
+    <div class="card-head">
+      <div>
+        <h2>🎯 Detección de Grupos de Noticias Coordinadas</h2>
+        <p class="small muted">
+          Notas de distintos medios agrupadas por compartir términos, expresiones y entidades clave en sus titulares.
+        </p>
+      </div>
+      <a href="/grupos" class="btn btn-ghost">Ver todos los grupos ({{ total_groups }}) →</a>
+    </div>
+
+    {% if featured_groups %}
+    <div class="groups-grid">
+      {% for g, common, media_list, sentiment_info in featured_groups %}
+      <article class="group-card">
+        <div class="group-card-header">
+          <div class="group-badges">
+            <span class="badge badge-media-count" title="Medios independientes cubriendo la noticia">
+              🏛️ {{ g.independent_media_count }} medio{{ 's' if g.independent_media_count != 1 }}
+            </span>
+            <span class="badge badge-notes-count">
+              📰 {{ g.article_count }} nota{{ 's' if g.article_count != 1 }}
+            </span>
+            {% if sentiment_info %}
+            <span class="badge badge-sentiment-{{ sentiment_info.tipo }}" title="Sentimiento / Enfoque detectado">
+              {{ sentiment_info.label }}
+            </span>
+            {% endif %}
+          </div>
+          <span class="small muted">{{ g.first_seen_at | local_dt }}</span>
+        </div>
+
+        <h3 class="group-card-title">
+          <a href="/grupos/{{ g.id }}">{{ g.title }}</a>
+        </h3>
+
+        <div class="media-pills">
+          {% for m in media_list %}
+          <span class="media-tag media-tag-{{ m.slug }}" title="{{ m.name }}">{{ m.name }}</span>
+          {% endfor %}
+        </div>
+
+        {% if common.frases %}
+        <div class="group-phrases">
+          <span class="phrase-label">Frases:</span>
+          {% for f in common.frases[:2] %}
+          <span class="phrase-item">“{{ f }}”</span>
+          {% endfor %}
+        </div>
+        {% elif common.terminos %}
+        <div class="group-terms small muted">
+          Términos: {{ common.terminos[:5] | join(', ') }}
+        </div>
+        {% endif %}
+
+        <div class="group-card-footer">
+          <a href="/grupos/{{ g.id }}" class="btn btn-small btn-ghost">Ver detalles y notas →</a>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No se detectaron grupos de noticias todavía. Corré la recolección con <code>python -m radar collect</code>.</p>
+    {% endif %}
+  </section>
+
+  <!-- ACCESO RÁPIDO A SENTIMIENTO Y ALERTAS -->
+  <div class="grid-2">
+    <section class="card card-sentiment-banner">
+      <div class="card-head">
+        <h2>📊 Sentimiento y Tono Editorial</h2>
+        <span class="badge badge-sentiment-opuesto">IA</span>
+      </div>
+      <p class="small muted">
+        Lectura automatizada del tono (favorable, crítico o neutral) de cada medio hacia los sujetos de las noticias y detección de enfoques opuestos.
+      </p>
+      <div style="margin-top: 14px;">
+        <a href="/sentimiento" class="btn">Explorar análisis de sentimiento →</a>
+      </div>
+    </section>
+
+    {% if top_alerts %}
+    <section class="card">
+      <div class="card-head">
+        <h2>{{ 'Alertas revisadas' if public_view else 'Alertas prioritarias' }}</h2>
+        <a href="/alertas" class="small">Ver todas →</a>
+      </div>
+      <ul class="compact-list">
+        {% for a in top_alerts %}
+        <li>
+          <span class="badge prio-{{ a.priority }}">{{ a.priority }}</span>
+          <a href="/alertas/{{ a.id }}">{{ a.title }}</a>
+          <span class="small muted">· {{ a.independent_media_count }} medios</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% else %}
+    <section class="card">
+      <h2>Cobertura por medios (últimas 24 h)</h2>
+      <table class="table compact">
+        <tbody>
+        {% for m, n in per_media[:4] %}
+          {% set st = health.get(m.id, 'operativa') %}
+          <tr>
+            <td><a href="/noticias?media={{ m.slug }}">{{ m.name }}</a></td>
+            <td class="num">{{ n }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+  </div>
+
+  <!-- ÚLTIMAS NOTICIAS -->
+  <section class="card">
+    <div class="card-head">
+      <h2>Últimas noticias detectadas</h2>
+      <a href="/noticias" class="btn btn-ghost btn-small">Ver todas las noticias →</a>
+    </div>
+    <div class="legend-bar small" style="margin-bottom: 12px;">
+      <span class="legend-title">Autoría:</span>
+      <span class="badge badge-author-has">✍️ Con autor</span>
+      <span class="badge badge-author-none">⚪ Sin firma</span>
+      <span style="margin-left: 12px;" class="legend-title">Popularidad:</span>
+      <span class="badge badge-clicks">👆 Contador de clicks</span>
+    </div>
+    {% if latest %}
+    <table class="table responsive">
+      <thead><tr><th>Medio</th><th>Titular</th><th>Clicks</th><th>Publicada</th><th>Detectada</th></tr></thead>
+      <tbody>{% for a in latest %}{% include "partials/article_row.html" %}{% endfor %}</tbody>
+    </table>
+    {% else %}
+    <p class="muted">Todavía no hay noticias registradas.</p>
+    {% endif %}
+  </section>
+
+  <!-- FUENTES Y TEMAS -->
+  <div class="grid-2">
+    <section class="card">
+      <h2>Medios monitoreados</h2>
+      <table class="table compact">
+        <tbody>
+        {% for m, n in per_media %}
+          {% set st = health.get(m.id, 'operativa') %}
+          <tr>
+            <td>
+              <a href="/noticias?media={{ m.slug }}">{{ m.name }}</a>
+              {% if m.is_demo %}<span class="badge badge-demo">DEMO</span>{% endif %}
+              {% if st not in ('operativa', 'sin_consultar') %}
+              <a href="/fuentes" class="badge state-{{ st }}">{{ labels[st] }}</a>
+              {% endif %}
+            </td>
+            <td class="num">
+              {% if n == 0 and st in ('caida', 'bloqueada') %}
+              <span class="error-text">sin datos</span>
+              {% else %}
+              {{ n }}
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    <section class="card">
+      <h2>Temas de seguimiento</h2>
+      <table class="table compact">
+        <tbody>
+        {% for t, n in per_topic %}
+          <tr><td><a href="/noticias?topic={{ t.slug }}">{{ t.name }}</a></td><td class="num">{{ n }}</td></tr>
+        {% else %}
+          <tr><td class="muted">No hay temas configurados.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
 </div>
 {% endblock %}

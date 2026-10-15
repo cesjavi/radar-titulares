@@ -1,9 +1,9 @@
-{% set qs = '&media=' ~ (filters.media | urlencode) ~ '&topic=' ~ (filters.topic | urlencode) ~ '&q=' ~ (filters.q | urlencode) ~ '&seccion=' ~ (filters.seccion | urlencode) ~ '&periodo=' ~ (filters.periodo | urlencode) ~ '&autor=' ~ (filters.autor | urlencode) ~ ('&relacionadas=true' if filters.relacionadas else '') %}
+{% set qs = '&media=' ~ (filters.media | urlencode) ~ '&topic=' ~ (filters.topic | urlencode) ~ '&q=' ~ (filters.q | urlencode) ~ '&seccion=' ~ (filters.seccion | urlencode) ~ '&periodo=' ~ (filters.periodo | urlencode) ~ '&autor=' ~ (filters.autor | urlencode) ~ ('&relacionadas=true' if filters.relacionadas else '') ~ ('&min_clicks=' ~ filters.min_clicks if filters.min_clicks else '') ~ ('&orden=' ~ filters.orden if filters.orden else '') %}
 {% if media_warning %}<p class="alert alert-warn" role="status">{{ media_warning }}</p>{% endif %}
 <p class="muted small">{{ total }} resultado{{ 's' if total != 1 }} · página {{ page }} de {{ pages }}</p>
 {% if articles %}
 <table class="table responsive">
-  <thead><tr><th>Medio</th><th>Titular</th><th>Publicada</th><th>Detectada</th></tr></thead>
+  <thead><tr><th>Medio</th><th>Titular</th><th>Clicks</th><th>Publicada</th><th>Detectada</th></tr></thead>
   <tbody>{% for a in articles %}{% include "partials/article_row.html" %}{% endfor %}</tbody>
 </table>
 {% else %}
