@@ -668,3 +668,19 @@ input[type=checkbox] { width: auto; cursor: pointer; }
 .compact-list { list-style: none; padding: 0; margin: 0; }
 .compact-list li { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
 .compact-list li:last-child { border-bottom: 0; }
+
+/* Configuración: medios a recolectar */
+.media-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; }
+.media-box label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.media-all { font-weight: 700; margin-bottom: 8px; }
+.media-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px 12px; padding: 8px 0 0 22px; border-top: 1px dashed var(--border); }
+.chain-ok { color: var(--ok); }
+.chain-error { color: var(--error); }
+
+/* Resumen: orden y filtros de grupos */
+.filters-bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 10px 0 16px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.filter-item { display: flex; align-items: center; gap: 6px; }
+.filter-item select { padding: 4px 10px; font-size: .88rem; width: auto; border-radius: var(--radius-sm); }
+.filter-label { font-weight: 600; color: var(--text-secondary); }
+.filter-label-main { font-weight: 700; color: var(--text); }
+.filter-reset { margin-left: auto; }

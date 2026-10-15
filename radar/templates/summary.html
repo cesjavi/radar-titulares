@@ -57,20 +57,19 @@
     <form method="get" action="/#grupos-destacados-container"
           hx-get="/" hx-target="#grupos-destacados-container" hx-select="#grupos-destacados-container"
           hx-swap="outerHTML" hx-push-url="true"
-          class="filters-bar"
-          style="display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 10px 0 16px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);">
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <span class="small" style="font-weight: 700; color: var(--text);">Ordenar por:</span>
-        <select name="orden" onchange="this.form.requestSubmit()" style="padding: 4px 10px; font-size: 0.88rem; width: auto; border-radius: var(--radius-sm);">
+          class="filters-bar">
+      <div class="filter-item">
+        <span class="small filter-label filter-label-main">Ordenar por:</span>
+        <select name="orden" data-autosubmit>
           {% for k, label in group_orders.items() %}
           <option value="{{ k }}" {{ 'selected' if group_order == k }}>{{ label }}</option>
           {% endfor %}
         </select>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <span class="small" style="font-weight: 600; color: var(--text-secondary);">Medios:</span>
-        <select name="min_medios" onchange="this.form.requestSubmit()" style="padding: 4px 10px; font-size: 0.88rem; width: auto; border-radius: var(--radius-sm);">
+      <div class="filter-item">
+        <span class="small filter-label">Medios:</span>
+        <select name="min_medios" data-autosubmit>
           <option value="0" {{ 'selected' if min_medios == 0 }}>Todos</option>
           <option value="2" {{ 'selected' if min_medios == 2 }}>2 o más medios</option>
           <option value="3" {{ 'selected' if min_medios == 3 }}>3 o más medios</option>
@@ -78,9 +77,9 @@
         </select>
       </div>
 
-      <div style="display: flex; align-items: center; gap: 6px;">
-        <span class="small" style="font-weight: 600; color: var(--text-secondary);">Mostrar:</span>
-        <select name="limite" onchange="this.form.requestSubmit()" style="padding: 4px 10px; font-size: 0.88rem; width: auto; border-radius: var(--radius-sm);">
+      <div class="filter-item">
+        <span class="small filter-label">Mostrar:</span>
+        <select name="limite" data-autosubmit>
           <option value="6" {{ 'selected' if limite == 6 }}>6 grupos</option>
           <option value="12" {{ 'selected' if limite == 12 }}>12 grupos</option>
           <option value="18" {{ 'selected' if limite == 18 }}>18 grupos</option>
@@ -89,7 +88,7 @@
       </div>
 
       {% if group_order != 'medios' or min_medios != 0 or limite != 6 %}
-      <a href="/" hx-get="/" hx-target="#grupos-destacados-container" hx-select="#grupos-destacados-container" hx-swap="outerHTML" hx-push-url="true" class="btn btn-small btn-ghost" style="margin-left: auto;">Restablecer</a>
+      <a href="/" hx-get="/" hx-target="#grupos-destacados-container" hx-select="#grupos-destacados-container" hx-swap="outerHTML" hx-push-url="true" class="btn btn-small btn-ghost filter-reset">Restablecer</a>
       {% endif %}
     </form>
 

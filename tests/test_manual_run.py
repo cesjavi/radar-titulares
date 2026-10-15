@@ -162,3 +162,27 @@ def test_collect_chained_media_with_analysis_at_end(client, admin, db, calls):
     assert st["estado"] == "ok"
     assert "analisis" in st["resultado"]
 
+
+
+def test_serverless_collects_one_media_per_request(client, admin, db, calls, monkeypatch):
+    """En Vercel varios medios en un pedido superan el tiempo de la función: el panel los encadena."""
+    from radar.config import get_settings
+    from radar.seed import seed_sources
+
+    seed_sources(db)
+    db.commit()
+    login(client)
+    monkeypatch.setenv("VERCEL", "1")
+    get_settings.cache_clear()
+    try:
+        page = client.get("/configuracion").text
+        assert 'data-chain="1"' in page and "<script>" not in page
+        r = _run(client, tarea="recolectar", medios=["perfil", "infobae"])
+        assert r.status_code == 400 and "un medio por pedido" in r.text
+        assert calls == []
+        r = _run(client, tarea="recolectar", medios=["perfil"])
+        assert r.status_code == 303
+        assert calls == [("collect", "perfil", False, True)]  # el análisis se pide aparte
+    finally:
+        monkeypatch.delenv("VERCEL")
+        get_settings.cache_clear()

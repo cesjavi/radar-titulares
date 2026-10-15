@@ -81,9 +81,12 @@ def parse_options(form) -> dict:
     serverless = get_settings().serverless
     if serverless and task == "recolectar":
         # Todo corre dentro de una sola solicitud: sin tope, Vercel responde 504.
-        if not opts["medio"] and not opts["medios"]:
-            raise RunError("En Vercel elegí al menos un medio: recolectar todos juntos supera el tiempo "
-                           "máximo de la función. Repetí por medio, o usá los crons.")
+        # Cada solicitud recolecta un solo medio; el panel (static/js/panel.js) encadena los
+        # pedidos uno tras otro, cada uno en su propia invocación de la función.
+        if len(opts["medios"]) != 1:
+            raise RunError("En Vercel se recolecta un medio por pedido: recolectar varios juntos "
+                           "supera el tiempo máximo de la función. Recargá la página para que el "
+                           "panel los encadene uno tras otro, o usá los crons.")
         opts["no_analyze"] = True  # el análisis se pide aparte (tarea «analizar»)
     if task == "ia":
         raw = str(form.get("limit", "")).strip() or "1"

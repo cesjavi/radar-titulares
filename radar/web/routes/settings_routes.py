@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from radar import manual_run, runtime
+from radar.config import get_settings
 from radar.alerts.config import DEFAULTS as ALERT_DEFAULTS
 from radar.alerts.config import PRIORITIES, raw_settings, save_settings
 from radar.models import AppSetting, Media, SocialAccount, Topic, User
@@ -63,7 +64,7 @@ def _page(request, db, user, status_code: int = 200, **extra):
            "run_tasks": manual_run.TASKS, "run_state": manual_run.last_state(db),
            "run_media": [(m.slug, m.name) for m in db.scalars(
                select(Media).where(Media.is_demo.is_(False)).order_by(Media.name))],
-           "run_ai_max": manual_run.AI_LIMIT_MAX,
+           "run_ai_max": manual_run.AI_LIMIT_MAX, "run_serverless": get_settings().serverless,
            "social_accounts": db.scalars(select(SocialAccount).order_by(SocialAccount.name)).all(),
            "social_kinds": {"persona": "Persona", "organizacion": "Organización",
                             "medio": "Medio"}}

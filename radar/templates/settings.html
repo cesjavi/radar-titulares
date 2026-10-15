@@ -9,31 +9,27 @@
   {% if run_error %}<p class="alert alert-error">{{ run_error }}</p>{% endif %}
   {% include "partials/manual_run.html" %}
   <div class="grid-2">
-    <form method="post" action="/configuracion/ejecutar" class="stack card-inner" id="form-recolectar">
+    <form method="post" action="/configuracion/ejecutar" class="stack card-inner" id="form-recolectar"{% if run_serverless %} data-chain="1"{% endif %}>
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="tarea" value="recolectar">
       <h3>Recolectar noticias</h3>
-      <div class="stack" style="gap: 6px;">
-        <span class="small muted" style="font-weight: 600;">Medios a recolectar (se ejecutan en cadena uno tras otro):</span>
-        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px;">
-          <label class="inline" style="font-weight: 700; margin-bottom: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-            <input type="checkbox" id="check-all-media" checked>
-            <span>Todos los medios (en cadena)</span>
-          </label>
-          <div id="media-checkbox-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px 12px; padding-left: 22px; border-top: 1px dashed var(--border); padding-top: 8px;">
+      <div class="stack media-picker">
+        <span class="small muted">Medios a recolectar (se ejecutan en cadena, uno tras otro):</span>
+        <div class="media-box">
+          <label class="inline media-all"><input type="checkbox" id="check-all-media" checked> Todos los medios</label>
+          <div class="media-grid">
             {% for slug, name in run_media %}
-            <label class="inline small" style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
-              <input type="checkbox" name="medios" value="{{ slug }}" class="media-check" checked>
-              <span>{{ name }}</span>
-            </label>
+            <label class="inline small"><input type="checkbox" name="medios" value="{{ slug }}" class="media-check" checked> {{ name }}</label>
             {% endfor %}
           </div>
         </div>
+        {% if run_serverless %}<p class="small muted">En Vercel cada medio se pide por separado (cada uno en su propia ejecución, para no superar el tiempo máximo) y el análisis corre al final. No cierres esta página hasta que termine.</p>{% endif %}
       </div>
       <label class="inline"><input type="checkbox" name="force"> Ignorar el intervalo mínimo de cada fuente (<code>--force</code>)</label>
       <label class="inline"><input type="checkbox" name="no_enrich"> No leer páginas de notas (<code>--no-enrich</code>)</label>
       <label class="inline"><input type="checkbox" name="no_analyze"> No analizar al terminar (<code>--no-analyze</code>)</label>
-      <button type="submit" class="btn" id="btn-recolectar">Recolectar todos en cadena</button>
+      <button type="submit" class="btn" id="btn-recolectar">Recolectar</button>
+      <p class="small" id="chain-status" role="status" aria-live="polite" hidden></p>
     </form>
     <div class="stack">
       <form method="post" action="/configuracion/ejecutar" class="stack card-inner">
@@ -43,7 +39,7 @@
         <p class="small muted">Relaciones, grupos, alertas y, si está activada, la IA (<code>analyze</code>).</p>
         <button type="submit" class="btn">Analizar</button>
       </form>
-      <form method="post" action="/configuracion/ejecutar" class="stack card-inner" onsubmit="return confirm('Cada par analizado es una llamada al proveedor de IA y puede tener costo. ¿Continuar?');">
+      <form method="post" action="/configuracion/ejecutar" class="stack card-inner" data-confirm="Cada par analizado es una llamada al proveedor de IA y puede tener costo. ¿Continuar?">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="tarea" value="ia">
         <h3>Analizar con IA</h3>
@@ -294,45 +290,5 @@
   <p class="muted small">Al cambiarla se cierran las demás sesiones abiertas.</p>
 </section>
 
-<script>
-(function() {
-  const allToggle = document.getElementById("check-all-media");
-  const mediaChecks = Array.from(document.querySelectorAll(".media-check"));
-  const btn = document.getElementById("btn-recolectar");
-  if (!allToggle || !btn || mediaChecks.length === 0) return;
-
-  function updateState() {
-    const checked = mediaChecks.filter(function(c) { return c.checked; });
-    allToggle.checked = checked.length === mediaChecks.length;
-    allToggle.indeterminate = checked.length > 0 && checked.length < mediaChecks.length;
-
-    if (checked.length === 0) {
-      btn.disabled = true;
-      btn.textContent = "Elegí al menos un medio";
-    } else if (checked.length === mediaChecks.length) {
-      btn.disabled = false;
-      btn.textContent = "Recolectar todos en cadena (" + checked.length + ")";
-    } else if (checked.length === 1) {
-      btn.disabled = false;
-      const label = checked[0].closest("label") ? checked[0].closest("label").textContent.trim() : checked[0].value;
-      btn.textContent = "Recolectar (" + label + ")";
-    } else {
-      btn.disabled = false;
-      btn.textContent = "Recolectar en cadena (" + checked.length + " medios)";
-    }
-  }
-
-  allToggle.addEventListener("change", function() {
-    mediaChecks.forEach(function(c) { c.checked = allToggle.checked; });
-    updateState();
-  });
-
-  mediaChecks.forEach(function(c) {
-    c.addEventListener("change", updateState);
-  });
-
-  updateState();
-})();
-</script>
 
 {% endblock %}
