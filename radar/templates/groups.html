@@ -24,6 +24,9 @@
     <label class="inline">
       <input type="checkbox" name="corregidos" value="true" {{ 'checked' if corregidos }}> Solo corregidos
     </label>
+    <label class="inline">
+      <input type="checkbox" name="ocultos" value="true" {{ 'checked' if ocultos }}> Ver ocultos
+    </label>
     <label>Ordenar por
       <select name="orden">
         {% for k, label in orders.items() %}
@@ -32,7 +35,7 @@
       </select>
     </label>
     <button class="btn" type="submit">Aplicar</button>
-    {% if q or min_medios or corregidos or orden != 'recientes' %}
+    {% if q or min_medios or corregidos or ocultos or orden != 'recientes' %}
     <a class="btn btn-ghost" href="/grupos">Limpiar</a>
     {% endif %}
   </form>
@@ -96,7 +99,7 @@
   {% endif %}
 
   {% else %}
-  {% if q or min_medios or corregidos %}
+  {% if q or min_medios or corregidos or ocultos %}
   <p class="muted">Ningún grupo coincide con los filtros.</p>
   {% else %}
   <p class="muted">Todavía no hay grupos. Se generan con <code>python -m radar analyze</code> (también corre al final de cada recolección).</p>

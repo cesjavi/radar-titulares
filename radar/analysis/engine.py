@@ -226,6 +226,10 @@ def save_groups(db: Session, corpus: Corpus, summary: AnalysisSummary) -> None:
                StoryGroupMember.article_id.in_(recent_ids) if recent_ids else false())
         .distinct()).all()
     current = {g.id: {m.article_id for m in g.members if m.status == "activo"} for g in auto_groups}
+    # Notas de grupos ocultos a mano: si el motor arma un grupo nuevo con ellas, nace oculto.
+    hidden_article_ids = set(db.scalars(
+        select(StoryGroupMember.article_id).join(StoryGroup)
+        .where(StoryGroup.hidden_at.is_not(None))).all())
     used: set[int] = set()
     for c in sorted(clusters, key=lambda c: -len(c.ids)):
         best, best_j = None, 0.0
@@ -241,7 +245,8 @@ def save_groups(db: Session, corpus: Corpus, summary: AnalysisSummary) -> None:
             used.add(best)
             summary.groups_updated += 1
         else:
-            group = StoryGroup(title=info["title"][:500], status="open", created_at=now)
+            group = StoryGroup(title=info["title"][:500], status="open", created_at=now,
+                               hidden_at=now if c.ids & hidden_article_ids else None)
             db.add(group)
             db.flush()
             summary.groups_new += 1

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -22,6 +23,8 @@ from radar.models import (
 )
 from radar.web.routes.alerts_routes import PRIORITY_ORDER, _alert_scope
 from radar.queries import topic_condition, visible_articles
+from radar.seed import get_setting
+from radar.text import normalize_for_search
 from radar.sources_status import STATE_LABELS, media_health
 from radar.timeutil import utcnow
 from radar.web.deps import demo_visible, get_db, is_public, render, viewer
@@ -35,6 +38,21 @@ DASHBOARD_GROUP_ORDERS = {
     "actualizados": "Última actualización",
     "antiguos": "Fecha (más antigua)",
 }
+
+
+def excluded_terms_pattern(raw: str) -> re.Pattern | None:
+    """Términos excluidos del resumen (uno por línea), sin mayúsculas ni tildes y por palabra
+    completa: «papa» excluye «el papa León» pero no «papas fritas»."""
+    terms = [normalize_for_search(t) for t in raw.splitlines() if t.strip()]
+    if not terms:
+        return None
+    return re.compile(r"\b(?:" + "|".join(re.escape(t) for t in terms) + r")\b")
+
+
+def _excluded(group: StoryGroup, pattern: re.Pattern) -> bool:
+    titles = [group.title] + [m.article.title for m in group.members
+                              if m.status == "activo" and m.article is not None]
+    return any(pattern.search(normalize_for_search(t or "")) for t in titles)
 
 
 def _json(value: str | None, default):
@@ -64,7 +82,8 @@ def summary(
             .selectinload(StoryGroupMember.article)
             .selectinload(Article.media)
         )
-        .where(StoryGroup.status == "open", StoryGroup.article_count >= 1)
+        .where(StoryGroup.status == "open", StoryGroup.article_count >= 1,
+               StoryGroup.hidden_at.is_(None))
     )
     if not demo:
         demo_groups = (
@@ -89,9 +108,22 @@ def summary(
     if limite not in (6, 12, 18, 24):
         limite = 6
 
-    featured_raw = db.scalars(
-        group_stmt.order_by(*order_by).limit(limite)
-    ).all()
+    # Los términos excluidos se aplican en Python (sin tildes, por palabra completa), así que se
+    # leen tandas hasta completar el límite.
+    pattern = excluded_terms_pattern(get_setting(db, "summary_excluded_terms"))
+    featured_raw, excluded_count, offset, batch = [], 0, 0, limite if pattern is None else 60
+    while len(featured_raw) < limite and offset < 2000:
+        chunk = db.scalars(group_stmt.order_by(*order_by).offset(offset).limit(batch)).all()
+        for g in chunk:
+            if pattern is not None and _excluded(g, pattern):
+                excluded_count += 1
+            elif len(featured_raw) < limite:
+                featured_raw.append(g)
+        if len(chunk) < batch or pattern is None:
+            break
+        offset += batch
+    hidden_count = db.scalar(select(func.count(StoryGroup.id)).where(
+        StoryGroup.status == "open", StoryGroup.hidden_at.is_not(None))) or 0
 
     gids = [g.id for g in featured_raw]
     ai_analyses = {}
@@ -136,7 +168,8 @@ def summary(
         featured_groups.append((g, common, media_list, sentiment_info))
 
     total_groups = db.scalar(
-        select(func.count(StoryGroup.id)).where(StoryGroup.status == "open")
+        select(func.count(StoryGroup.id)).where(StoryGroup.status == "open",
+                                                StoryGroup.hidden_at.is_(None))
     ) or 0
     total_ai_analyses = db.scalar(
         select(func.count(AiGroupAnalysis.id)).where(AiGroupAnalysis.status == "ok")
@@ -200,6 +233,8 @@ def summary(
         "group_orders": DASHBOARD_GROUP_ORDERS,
         "min_medios": min_medios,
         "limite": limite,
+        "hidden_count": hidden_count,
+        "excluded_count": excluded_count,
         "total_groups": total_groups,
         "total_ai_analyses": total_ai_analyses,
         "per_media": per_media, "per_topic": per_topic, "latest": latest, "runs": runs,

@@ -236,7 +236,7 @@ def update_alerts(db: Session, now=None) -> AlertSummary:
             summary.skipped += 1
             summary.reasons[result["skip"]] = summary.reasons.get(result["skip"], 0) + 1
             continue
-        silenced = group.topic_id in silenced_ids
+        silenced = group.topic_id in silenced_ids or group.hidden_at is not None
         material = result["material"]
         payload = dict(
             title=group.title[:500], topic_id=group.topic_id, priority=result["priority"],

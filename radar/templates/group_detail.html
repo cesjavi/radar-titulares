@@ -7,7 +7,16 @@
   <div class="card-head">
     <h1 class="headline-lg">{{ g.title }}</h1>
     {% if g.locked %}<span class="badge badge-skipped">con correcciones manuales</span>{% endif %}
+    {% if g.hidden_at %}<span class="badge badge-skipped">oculto del resumen</span>{% endif %}
   </div>
+  {% if user and user.is_admin %}
+  <form method="post" action="/grupos/{{ g.id }}/ocultar" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="ocultar" value="{{ 'false' if g.hidden_at else 'true' }}">
+    <button type="submit" class="btn btn-small btn-ghost">{{ 'Volver a mostrar en el resumen' if g.hidden_at else 'Ocultar del resumen' }}</button>
+    {% if not g.hidden_at %}<span class="small muted">No se borra nada; la alerta pendiente queda silenciada.</span>{% endif %}
+  </form>
+  {% endif %}
   <dl class="meta compact-meta">
     <dt>Notas</dt><dd>{{ active | length }}</dd>
     <dt>Medios</dt><dd>{{ media_names | join(', ') }}</dd>

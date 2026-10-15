@@ -92,6 +92,11 @@
       {% endif %}
     </form>
 
+    {% if hidden_count or excluded_count %}
+    <p class="small muted">
+      {% if hidden_count %}{{ hidden_count }} grupo{{ 's' if hidden_count != 1 }} oculto{{ 's' if hidden_count != 1 }} a mano (<a href="/grupos?ocultos=true">ver</a>){% endif %}{% if hidden_count and excluded_count %} · {% endif %}{% if excluded_count %}{{ excluded_count }} excluido{{ 's' if excluded_count != 1 }} por términos{% if user and user.is_admin %} (<a href="/configuracion#resumen">editar</a>){% endif %}{% endif %}
+    </p>
+    {% endif %}
     {% if featured_groups %}
     <div class="groups-grid">
       {% for g, common, media_list, sentiment_info in featured_groups %}
@@ -138,6 +143,14 @@
 
         <div class="group-card-footer">
           <a href="/grupos/{{ g.id }}" class="btn btn-small btn-ghost">Ver detalles y notas →</a>
+          {% if user and user.is_admin %}
+          <form method="post" action="/grupos/{{ g.id }}/ocultar" class="inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="ocultar" value="true">
+            <input type="hidden" name="volver" value="/#grupos-destacados-container">
+            <button type="submit" class="btn btn-small btn-ghost" title="Sacar este grupo del resumen (no se borra; se puede volver a mostrar)">Ocultar</button>
+          </form>
+          {% endif %}
         </div>
       </article>
       {% endfor %}

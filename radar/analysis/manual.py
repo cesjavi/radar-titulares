@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import json
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from radar.alerts.engine import set_status
 from radar.analysis.engine import refresh_group_stats
-from radar.models import ArticleRelation, ManualReview, StoryGroup, StoryGroupMember, User
+from radar.models import Alert, ArticleRelation, ManualReview, StoryGroup, StoryGroupMember, User
 from radar.timeutil import utcnow
 
 REVIEW_DECISIONS = {"confirmada", "rechazada", "pendiente"}
@@ -65,7 +67,8 @@ def split_group(db: Session, group: StoryGroup, article_ids: list[int], user: Us
         raise ManualError("Elegí al menos un artículo del grupo.")
     if len(chosen) == len(active):
         raise ManualError("No se puede separar el grupo completo.")
-    new = StoryGroup(title=active[chosen[0]].article.title[:500], status="open", locked=True)
+    new = StoryGroup(title=active[chosen[0]].article.title[:500], status="open", locked=True,
+                     hidden_at=group.hidden_at)
     db.add(new)
     db.flush()
     for aid in chosen:
@@ -104,3 +107,18 @@ def merge_groups(db: Session, target: StoryGroup, other: StoryGroup, user: User,
     db.flush()
     refresh_group_stats(db, target)
     _log(db, user, "group", target.id, "unir", note, {"absorbido": other.id})
+
+
+def set_group_hidden(db: Session, group: StoryGroup, hidden: bool, user: User) -> None:
+    """Oculta o vuelve a mostrar un grupo en el resumen y la lista. No borra nada: las notas,
+    relaciones y alertas siguen en la base. Al ocultar, la alerta pendiente queda silenciada."""
+    if bool(group.hidden_at) == hidden:
+        return
+    now = utcnow()
+    group.hidden_at = now if hidden else None
+    _log(db, user, "group", group.id, "oculto" if hidden else "visible", None)
+    if hidden:
+        alert = db.scalar(select(Alert).where(Alert.group_id == group.id,
+                                              Alert.status == "pendiente"))
+        if alert is not None:
+            set_status(db, alert, "silenciada", user, "Grupo ocultado del resumen.")

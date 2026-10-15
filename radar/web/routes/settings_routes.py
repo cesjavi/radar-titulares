@@ -54,6 +54,7 @@ def _page(request, db, user, status_code: int = 200, **extra):
     ctx = {"topics": db.scalars(select(Topic).order_by(Topic.name)).all(),
            "nav": "configuracion", "min_pw": MIN_PASSWORD_LENGTH,
            "priority_sections": get_setting(db, "priority_sections"),
+           "summary_excluded_terms": get_setting(db, "summary_excluded_terms"),
            "alert_cfg": raw_settings(db), "priorities": PRIORITIES,
            "telegram_enabled": telegram.enabled(), "telegram_configured": telegram.configured(),
            "ai_cfg": ai_cfg, "ai_usage": ai_usage_today(db),
@@ -134,6 +135,20 @@ def priority_sections_update(
     else:
         row.value = ",".join(cleaned[:30])
     return RedirectResponse("/configuracion#secciones", status_code=303)
+
+
+@router.post("/resumen", dependencies=[Depends(verify_csrf)])
+def summary_excluded_update(
+    terms: str = Form("", max_length=10000),
+    db: Session = Depends(get_db), user: User = Depends(require_admin),
+):
+    value = _clean_lines(terms)
+    row = db.get(AppSetting, "summary_excluded_terms")
+    if row is None:
+        db.add(AppSetting(key="summary_excluded_terms", value=value))
+    else:
+        row.value = value
+    return RedirectResponse("/configuracion#resumen", status_code=303)
 
 
 @router.post("/alertas", dependencies=[Depends(verify_csrf)])

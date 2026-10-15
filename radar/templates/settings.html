@@ -114,6 +114,17 @@
   <p class="muted small">Las subfuentes por sección (RSS, sitemaps y portadas HTML) se activan o pausan en <a href="/fuentes">Estado de fuentes</a>.</p>
 </section>
 
+<section class="card" id="resumen">
+  <h2>Excluir del resumen</h2>
+  <p class="muted small">Los grupos cuyo título (o el de alguna de sus notas) contenga alguno de estos términos no se muestran en los destacados del resumen. Se compara sin mayúsculas ni tildes y por palabra completa: <code>papa</code> excluye «el papa León XIV» pero no «papas fritas». No se borra nada: los grupos siguen en <a href="/grupos">Grupos</a> y en las alertas. Para sacar un solo grupo, usá «Ocultar» en su tarjeta.</p>
+  <form method="post" action="/configuracion/resumen" class="stack narrow">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Términos (uno por línea) <textarea name="terms" rows="5" maxlength="10000">{{ summary_excluded_terms }}</textarea></label>
+    <button type="submit" class="btn">Guardar</button>
+  </form>
+  <p class="muted small"><a href="/grupos?ocultos=true">Ver los grupos ocultos a mano</a> (para volver a mostrarlos).</p>
+</section>
+
 <section class="card" id="alertas">
   <h2>Alertas</h2>
   <p class="muted small">Los cambios se aplican en el próximo análisis. La prioridad indica qué revisar primero; no significa falsedad ni coordinación.</p>

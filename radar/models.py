@@ -368,6 +368,9 @@ class StoryGroup(Base):
     status: Mapped[str] = mapped_column(String(16), default="open")
     # Con correcciones manuales: el motor no cambia su composición al reprocesar.
     locked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # Oculto a mano del resumen y la lista de grupos (no se borra nada). Al reprocesar, un grupo
+    # nuevo que comparte notas con uno oculto nace oculto.
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime)
     merged_into_id: Mapped[int | None] = mapped_column(
         ForeignKey("story_groups.id", ondelete="SET NULL"))
     article_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

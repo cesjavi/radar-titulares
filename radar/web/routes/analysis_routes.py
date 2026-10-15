@@ -21,7 +21,14 @@ from radar.ai.service import (
     latest_for_group,
     pair_filter,
 )
-from radar.analysis.manual import ManualError, merge_groups, remove_member, review_relation, split_group
+from radar.analysis.manual import (
+    ManualError,
+    merge_groups,
+    remove_member,
+    review_relation,
+    set_group_hidden,
+    split_group,
+)
 from radar.analysis.relations import RULES, TYPE_LABELS
 from radar.analysis.textproc import highlight
 from radar.config import get_settings
@@ -75,6 +82,7 @@ def _visible(article: Article, request: Request) -> bool:
 @router.get("/grupos")
 def group_list(request: Request, q: str = Query("", max_length=100),
                min_medios: int = Query(0, ge=0, le=20), corregidos: bool = Query(False),
+               ocultos: bool = Query(False),
                orden: str = Query("recientes", max_length=16),
                page: int = Query(1, ge=1, le=10000),
                db: Session = Depends(get_db), user: User = Depends(viewer)):
@@ -87,6 +95,8 @@ def group_list(request: Request, q: str = Query("", max_length=100),
         stmt = stmt.where(StoryGroup.independent_media_count >= min_medios)
     if corregidos:
         stmt = stmt.where(StoryGroup.locked.is_(True))
+    # Los ocultos a mano solo se ven pidiéndolos (para volver a mostrarlos).
+    stmt = stmt.where(StoryGroup.hidden_at.is_not(None) if ocultos else StoryGroup.hidden_at.is_(None))
     if orden not in GROUP_ORDERS:
         orden = "recientes"
     order = {"recientes": [StoryGroup.first_seen_at.desc().nulls_last()],
@@ -155,10 +165,11 @@ def group_list(request: Request, q: str = Query("", max_length=100),
     return render(request, "groups.html", {"rows": rows, "page": min(page, pages), "pages": pages,
                                            "total": total, "nav": "grupos",
                                            "q": q, "min_medios": min_medios, "corregidos": corregidos,
-                                           "orden": orden, "orders": GROUP_ORDERS,
+                                           "ocultos": ocultos, "orden": orden, "orders": GROUP_ORDERS,
                                            "qs": urlencode({k: v for k, v in {
                                                "q": q, "min_medios": min_medios,
                                                "corregidos": "true" if corregidos else "",
+                                               "ocultos": "true" if ocultos else "",
                                                "orden": orden}.items() if v})}, user=user)
 
 
@@ -310,6 +321,18 @@ def group_ai_analyze(group_id: int, db: Session = Depends(get_db),
     group = _load_group(db, group_id)
     message = analyze_group_for_admin(db, group)
     return RedirectResponse(f"/grupos/{group_id}?ia={quote(message)}", status_code=303)
+
+
+@router.post("/grupos/{group_id}/ocultar", dependencies=[Depends(verify_csrf)])
+def group_hide(group_id: int, request: Request, ocultar: bool = Form(True),
+               volver: str = Form("", max_length=500),
+               db: Session = Depends(get_db), user: User = Depends(require_admin)):
+    group = _load_group(db, group_id)
+    set_group_hidden(db, group, ocultar, user)
+    # Solo se vuelve a una ruta propia del panel (nada de URLs externas).
+    safe = volver.startswith("/") and not volver.startswith(("//", "/\\"))
+    target = volver if safe else f"/grupos/{group_id}"
+    return RedirectResponse(target, status_code=303)
 
 
 @router.post("/grupos/{group_id}/quitar", dependencies=[Depends(verify_csrf)])
