@@ -9,16 +9,31 @@
   {% if run_error %}<p class="alert alert-error">{{ run_error }}</p>{% endif %}
   {% include "partials/manual_run.html" %}
   <div class="grid-2">
-    <form method="post" action="/configuracion/ejecutar" class="stack card-inner">
+    <form method="post" action="/configuracion/ejecutar" class="stack card-inner" id="form-recolectar">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input type="hidden" name="tarea" value="recolectar">
       <h3>Recolectar noticias</h3>
-      <label>Medio
-        <select name="medio"><option value="">Todos</option>{% for slug, name in run_media %}<option value="{{ slug }}">{{ name }}</option>{% endfor %}</select></label>
+      <div class="stack" style="gap: 6px;">
+        <span class="small muted" style="font-weight: 600;">Medios a recolectar (se ejecutan en cadena uno tras otro):</span>
+        <div style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px;">
+          <label class="inline" style="font-weight: 700; margin-bottom: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" id="check-all-media" checked>
+            <span>Todos los medios (en cadena)</span>
+          </label>
+          <div id="media-checkbox-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px 12px; padding-left: 22px; border-top: 1px dashed var(--border); padding-top: 8px;">
+            {% for slug, name in run_media %}
+            <label class="inline small" style="cursor: pointer; display: flex; align-items: center; gap: 6px;">
+              <input type="checkbox" name="medios" value="{{ slug }}" class="media-check" checked>
+              <span>{{ name }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
       <label class="inline"><input type="checkbox" name="force"> Ignorar el intervalo mínimo de cada fuente (<code>--force</code>)</label>
       <label class="inline"><input type="checkbox" name="no_enrich"> No leer páginas de notas (<code>--no-enrich</code>)</label>
       <label class="inline"><input type="checkbox" name="no_analyze"> No analizar al terminar (<code>--no-analyze</code>)</label>
-      <button type="submit" class="btn">Recolectar</button>
+      <button type="submit" class="btn" id="btn-recolectar">Recolectar todos en cadena</button>
     </form>
     <div class="stack">
       <form method="post" action="/configuracion/ejecutar" class="stack card-inner">
@@ -278,5 +293,46 @@
   </form>
   <p class="muted small">Al cambiarla se cierran las demás sesiones abiertas.</p>
 </section>
+
+<script>
+(function() {
+  const allToggle = document.getElementById("check-all-media");
+  const mediaChecks = Array.from(document.querySelectorAll(".media-check"));
+  const btn = document.getElementById("btn-recolectar");
+  if (!allToggle || !btn || mediaChecks.length === 0) return;
+
+  function updateState() {
+    const checked = mediaChecks.filter(function(c) { return c.checked; });
+    allToggle.checked = checked.length === mediaChecks.length;
+    allToggle.indeterminate = checked.length > 0 && checked.length < mediaChecks.length;
+
+    if (checked.length === 0) {
+      btn.disabled = true;
+      btn.textContent = "Elegí al menos un medio";
+    } else if (checked.length === mediaChecks.length) {
+      btn.disabled = false;
+      btn.textContent = "Recolectar todos en cadena (" + checked.length + ")";
+    } else if (checked.length === 1) {
+      btn.disabled = false;
+      const label = checked[0].closest("label") ? checked[0].closest("label").textContent.trim() : checked[0].value;
+      btn.textContent = "Recolectar (" + label + ")";
+    } else {
+      btn.disabled = false;
+      btn.textContent = "Recolectar en cadena (" + checked.length + " medios)";
+    }
+  }
+
+  allToggle.addEventListener("change", function() {
+    mediaChecks.forEach(function(c) { c.checked = allToggle.checked; });
+    updateState();
+  });
+
+  mediaChecks.forEach(function(c) {
+    c.addEventListener("change", updateState);
+  });
+
+  updateState();
+})();
+</script>
 
 {% endblock %}

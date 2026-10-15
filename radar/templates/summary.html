@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Radar de Titulares — Detección de Cobertura y Sentimiento{% endblock %}
 {% block content %}
-<div id="resumen" hx-get="/" hx-trigger="every 120s" hx-select="#resumen" hx-target="this" hx-swap="outerHTML">
+<div id="resumen" hx-get="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}" hx-trigger="every 120s" hx-select="#resumen" hx-target="this" hx-swap="outerHTML">
   <div class="dashboard-hero">
     <div class="hero-content">
       <h1 class="hero-title">Radar de Titulares</h1>
@@ -10,7 +10,7 @@
       </p>
     </div>
     <div class="hero-status small muted">
-      Última recolección exitosa: <strong>{{ last_ok | local_dt }}</strong> · pantalla actualizada a las {{ loaded_at | local_dt }} (se refresca sola cada 2 minutos) · <a href="/" class="link">Actualizar ahora ↻</a>
+      Última recolección exitosa: <strong>{{ last_ok | local_dt }}</strong> · pantalla actualizada a las {{ loaded_at | local_dt }} (se refresca sola cada 2 minutos) · <a href="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}" class="link">Actualizar ahora ↻</a>
     </div>
   </div>
 
@@ -42,7 +42,7 @@
   </div>
 
   <!-- SECCIÓN PRINCIPAL: Detección de Grupos de Noticias Coordinadas -->
-  <section class="card card-featured">
+  <section class="card card-featured" id="grupos-destacados-container">
     <div class="card-head">
       <div>
         <h2>🎯 Detección de Grupos de Noticias Coordinadas</h2>
@@ -52,6 +52,46 @@
       </div>
       <a href="/grupos" class="btn btn-ghost">Ver todos los grupos ({{ total_groups }}) →</a>
     </div>
+
+    <!-- Barra de orden y filtros -->
+    <form method="get" action="/#grupos-destacados-container"
+          hx-get="/" hx-target="#grupos-destacados-container" hx-select="#grupos-destacados-container"
+          hx-swap="outerHTML" hx-push-url="true"
+          class="filters-bar"
+          style="display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; margin: 10px 0 16px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span class="small" style="font-weight: 700; color: var(--text);">Ordenar por:</span>
+        <select name="orden" onchange="this.form.requestSubmit()" style="padding: 4px 10px; font-size: 0.88rem; width: auto; border-radius: var(--radius-sm);">
+          {% for k, label in group_orders.items() %}
+          <option value="{{ k }}" {{ 'selected' if group_order == k }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span class="small" style="font-weight: 600; color: var(--text-secondary);">Medios:</span>
+        <select name="min_medios" onchange="this.form.requestSubmit()" style="padding: 4px 10px; font-size: 0.88rem; width: auto; border-radius: var(--radius-sm);">
+          <option value="0" {{ 'selected' if min_medios == 0 }}>Todos</option>
+          <option value="2" {{ 'selected' if min_medios == 2 }}>2 o más medios</option>
+          <option value="3" {{ 'selected' if min_medios == 3 }}>3 o más medios</option>
+          <option value="4" {{ 'selected' if min_medios == 4 }}>4 medios</option>
+        </select>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span class="small" style="font-weight: 600; color: var(--text-secondary);">Mostrar:</span>
+        <select name="limite" onchange="this.form.requestSubmit()" style="padding: 4px 10px; font-size: 0.88rem; width: auto; border-radius: var(--radius-sm);">
+          <option value="6" {{ 'selected' if limite == 6 }}>6 grupos</option>
+          <option value="12" {{ 'selected' if limite == 12 }}>12 grupos</option>
+          <option value="18" {{ 'selected' if limite == 18 }}>18 grupos</option>
+          <option value="24" {{ 'selected' if limite == 24 }}>24 grupos</option>
+        </select>
+      </div>
+
+      {% if group_order != 'medios' or min_medios != 0 or limite != 6 %}
+      <a href="/" hx-get="/" hx-target="#grupos-destacados-container" hx-select="#grupos-destacados-container" hx-swap="outerHTML" hx-push-url="true" class="btn btn-small btn-ghost" style="margin-left: auto;">Restablecer</a>
+      {% endif %}
+    </form>
 
     {% if featured_groups %}
     <div class="groups-grid">

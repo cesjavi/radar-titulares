@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -28,6 +28,14 @@ from radar.web.deps import demo_visible, get_db, is_public, render, viewer
 
 router = APIRouter()
 
+DASHBOARD_GROUP_ORDERS = {
+    "recientes": "Fecha (más reciente)",
+    "medios": "Más medios independientes",
+    "notas": "Más notas",
+    "actualizados": "Última actualización",
+    "antiguos": "Fecha (más antigua)",
+}
+
 
 def _json(value: str | None, default):
     try:
@@ -37,7 +45,14 @@ def _json(value: str | None, default):
 
 
 @router.get("/")
-def summary(request: Request, db: Session = Depends(get_db), user: User = Depends(viewer)):
+def summary(
+    request: Request,
+    orden: str = Query("medios", max_length=20),
+    min_medios: int = Query(0, ge=0, le=20),
+    limite: int = Query(6, ge=1, le=48),
+    db: Session = Depends(get_db),
+    user: User = Depends(viewer),
+):
     demo = demo_visible(request)
     since = utcnow() - timedelta(hours=24)
 
@@ -57,11 +72,25 @@ def summary(request: Request, db: Session = Depends(get_db), user: User = Depend
         )
         group_stmt = group_stmt.where(StoryGroup.id.not_in(demo_groups))
 
+    if min_medios > 0:
+        group_stmt = group_stmt.where(StoryGroup.independent_media_count >= min_medios)
+
+    if orden not in DASHBOARD_GROUP_ORDERS:
+        orden = "medios"
+
+    order_by = {
+        "recientes": [StoryGroup.first_seen_at.desc().nulls_last(), StoryGroup.id.desc()],
+        "medios": [StoryGroup.independent_media_count.desc(), StoryGroup.first_seen_at.desc(), StoryGroup.id.desc()],
+        "notas": [StoryGroup.article_count.desc(), StoryGroup.first_seen_at.desc(), StoryGroup.id.desc()],
+        "actualizados": [StoryGroup.updated_at.desc().nulls_last(), StoryGroup.id.desc()],
+        "antiguos": [StoryGroup.first_seen_at.asc().nulls_last(), StoryGroup.id.desc()],
+    }[orden]
+
+    if limite not in (6, 12, 18, 24):
+        limite = 6
+
     featured_raw = db.scalars(
-        group_stmt.order_by(
-            StoryGroup.independent_media_count.desc(),
-            StoryGroup.first_seen_at.desc(),
-        ).limit(6)
+        group_stmt.order_by(*order_by).limit(limite)
     ).all()
 
     gids = [g.id for g in featured_raw]
@@ -167,6 +196,10 @@ def summary(request: Request, db: Session = Depends(get_db), user: User = Depend
 
     return render(request, "summary.html", {
         "featured_groups": featured_groups,
+        "group_order": orden,
+        "group_orders": DASHBOARD_GROUP_ORDERS,
+        "min_medios": min_medios,
+        "limite": limite,
         "total_groups": total_groups,
         "total_ai_analyses": total_ai_analyses,
         "per_media": per_media, "per_topic": per_topic, "latest": latest, "runs": runs,

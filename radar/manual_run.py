@@ -50,25 +50,39 @@ def parse_options(form) -> dict:
     task = str(form.get("tarea", ""))
     if task not in TASKS:
         raise RunError("Elegí una tarea.")
-    opts: dict = {"tarea": task, "medio": "", "force": False, "no_enrich": False,
+    opts: dict = {"tarea": task, "medio": "", "medios": [], "force": False, "no_enrich": False,
                   "no_analyze": False, "limit": None, "dry_run": False}
     if task in ("recolectar", "probar"):
-        opts["medio"] = str(form.get("medio", "")).strip()[:64]
-        if opts["medio"]:
-            from radar.collector.runner import check_media_slug
+        from radar.collector.runner import check_media_slug
 
+        raw_medios = form.getlist("medios") if hasattr(form, "getlist") else form.get("medios", [])
+        if isinstance(raw_medios, str):
+            raw_medios = [raw_medios]
+        elif not isinstance(raw_medios, list):
+            raw_medios = list(raw_medios)
+
+        selected = [str(m).strip()[:64] for m in raw_medios if str(m).strip()]
+        single = str(form.get("medio", "")).strip()[:64]
+        if single and single not in selected:
+            selected.append(single)
+
+        for m in selected:
             try:
-                check_media_slug(opts["medio"])
+                check_media_slug(m)
             except ValueError as exc:
                 raise RunError(str(exc)) from exc
+
+        opts["medios"] = selected
+        opts["medio"] = selected[0] if len(selected) == 1 else (single or "")
+
     if task == "recolectar":
         for name in ("force", "no_enrich", "no_analyze"):
             opts[name] = bool(form.get(name))
     serverless = get_settings().serverless
     if serverless and task == "recolectar":
         # Todo corre dentro de una sola solicitud: sin tope, Vercel responde 504.
-        if not opts["medio"]:
-            raise RunError("En Vercel elegí un medio: recolectar todos juntos supera el tiempo "
+        if not opts["medio"] and not opts["medios"]:
+            raise RunError("En Vercel elegí al menos un medio: recolectar todos juntos supera el tiempo "
                            "máximo de la función. Repetí por medio, o usá los crons.")
         opts["no_analyze"] = True  # el análisis se pide aparte (tarea «analizar»)
     if task == "ia":
@@ -84,8 +98,13 @@ def parse_options(form) -> dict:
 
 def describe(opts: dict) -> str:
     parts = [TASKS[opts["tarea"]].split(" (")[0]]
-    if opts.get("medio"):
+    medios = opts.get("medios", [])
+    if len(medios) > 1:
+        parts.append(f"{len(medios)} medios encadenados ({', '.join(medios)})")
+    elif opts.get("medio"):
         parts.append(f"medio {opts['medio']}")
+    elif medios:
+        parts.append(f"medio {medios[0]}")
     for flag, text in (("force", "ignorando el intervalo"), ("no_enrich", "sin leer páginas"),
                        ("no_analyze", "sin analizar al final"), ("dry_run", "solo simulación")):
         if opts.get(flag):
@@ -144,17 +163,49 @@ def running(db=None) -> bool:
 # --- ejecución -----------------------------------------------------------------------------------
 
 
-def _execute(opts: dict) -> dict:
+def _execute(opts: dict, on_progress=None) -> dict:
     """Corre la tarea y devuelve el resultado (diccionario serializable)."""
     from radar import pipeline
 
     task = opts["tarea"]
     if task == "recolectar":
-        result = {"recoleccion": pipeline.collect_phase(opts["medio"] or None, opts["force"],
-                                                        enrich=not opts["no_enrich"])}
-        if not opts["no_analyze"]:
-            result["analisis"] = pipeline.analysis_phase()
-        return result
+        medios = opts.get("medios", [])
+        if len(medios) > 1:
+            total_subfuentes = 0
+            total_problemas = 0
+            total_notas = 0
+            total_paginas = 0
+            for idx, m in enumerate(medios, 1):
+                if on_progress:
+                    on_progress(f"recolectando {m} [{idx}/{len(medios)}]")
+                res = pipeline.collect_phase(m, opts["force"], enrich=not opts["no_enrich"], social=False)
+                total_subfuentes += res.get("subfuentes", 0)
+                total_problemas += res.get("con_problemas", 0)
+                total_notas += res.get("notas_nuevas", 0)
+                total_paginas += res.get("paginas_leidas", 0)
+
+            result = {
+                "recoleccion": {
+                    "estado": "ok",
+                    "medios": f"{len(medios)} encadenados ({', '.join(medios)})",
+                    "subfuentes": total_subfuentes,
+                    "con_problemas": total_problemas,
+                    "notas_nuevas": total_notas,
+                    "paginas_leidas": total_paginas,
+                }
+            }
+            if not opts["no_analyze"]:
+                if on_progress:
+                    on_progress("analizando relaciones y alertas")
+                result["analisis"] = pipeline.analysis_phase()
+            return result
+        else:
+            medio = medios[0] if medios else (opts.get("medio") or None)
+            result = {"recoleccion": pipeline.collect_phase(medio, opts["force"],
+                                                            enrich=not opts["no_enrich"])}
+            if not opts["no_analyze"]:
+                result["analisis"] = pipeline.analysis_phase()
+            return result
     if task == "analizar":
         return {"analisis": pipeline.analysis_phase()}
     if task == "mantenimiento":
@@ -163,7 +214,15 @@ def _execute(opts: dict) -> dict:
         return {"ia": pipeline.ai_phase(opts["limit"])}
     from radar.probe import probe_media
 
-    rows = probe_media(opts["medio"] or None)
+    medios = opts.get("medios", [])
+    if len(medios) > 1:
+        all_rows = []
+        for m in medios:
+            all_rows.extend(probe_media(m))
+        rows = all_rows
+    else:
+        medio = medios[0] if medios else (opts.get("medio") or None)
+        rows = probe_media(medio)
     return {"fuentes": rows, "resumen": {
         "ok": sum(r["estado"] == "ok" for r in rows),
         "vacias": sum(r["estado"] == "vacia" for r in rows),
@@ -171,11 +230,18 @@ def _execute(opts: dict) -> dict:
 
 
 def _run(opts: dict, user: str) -> None:
+    base_desc = describe(opts)
     state = {"estado": "en_curso", "inicio": utcnow().isoformat(), "opciones": opts,
-             "descripcion": describe(opts), "usuario": user}
+             "descripcion": base_desc, "usuario": user}
     _save(state)
+
+    def on_progress(step_info: str) -> None:
+        state["descripcion"] = f"{base_desc} · {step_info}"
+        _save(state)
+
     try:
-        state["resultado"] = _execute(opts)
+        state["resultado"] = _execute(opts, on_progress=on_progress)
+        state["descripcion"] = base_desc
         state["estado"] = "ok"
     except Exception as exc:  # el detalle va al log; a la pantalla, solo el tipo y un mensaje corto
         log.exception("Ejecución manual fallida: %s", opts["tarea"])

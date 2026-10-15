@@ -134,3 +134,31 @@ def test_requires_admin_and_csrf(client, admin, calls):
     assert client.post("/configuracion/ejecutar", data={"tarea": "analizar"}).status_code == 403
     assert client.get("/configuracion/ejecutar/estado").status_code == 200
     assert calls == []
+
+
+def test_collect_chained_multiple_media(client, admin, db, calls):
+    from radar.seed import seed_sources
+
+    seed_sources(db)
+    db.commit()
+    login(client)
+    _run(client, tarea="recolectar", medios=["perfil", "infobae"], no_analyze="on")
+    assert calls == [("collect", "perfil", False, True), ("collect", "infobae", False, True)]
+    st = manual_run.last_state(db)
+    assert st["estado"] == "ok"
+    assert "2 medios encadenados" in st["descripcion"]
+    assert "2 encadenados" in st["resultado"]["recoleccion"]["medios"]
+
+
+def test_collect_chained_media_with_analysis_at_end(client, admin, db, calls):
+    from radar.seed import seed_sources
+
+    seed_sources(db)
+    db.commit()
+    login(client)
+    _run(client, tarea="recolectar", medios=["perfil", "eldestape"])
+    assert calls == [("collect", "perfil", False, True), ("collect", "eldestape", False, True), ("analyze",)]
+    st = manual_run.last_state(db)
+    assert st["estado"] == "ok"
+    assert "analisis" in st["resultado"]
+
