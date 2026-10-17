@@ -150,6 +150,22 @@ def _analyze():
     return summary
 
 
+def cmd_evaluate(args) -> int:
+    """Precisión del motor léxico según las etiquetas humanas (no hace llamadas externas)."""
+    import json
+
+    from radar.analysis import ALGORITHM_VERSION
+    from radar.analysis.evaluation import format_report, precision_report
+    from radar.db import session_scope
+
+    version = None if args.version == "todas" else (args.version or ALGORITHM_VERSION)
+    with session_scope() as db:
+        report = precision_report(db, version)
+    print(json.dumps(report.as_dict(), ensure_ascii=False, indent=2) if args.json
+          else format_report(report))
+    return 0
+
+
 def cmd_analyze(_args) -> int:
     """Detecta relaciones y grupos en la ventana reciente (sin IA)."""
     from radar.collector.runner import CollectorBusy
@@ -433,6 +449,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("analyze", help="Detectar relaciones, grupos y alertas (ventana de 72 h)")
     p.set_defaults(func=cmd_analyze)
+
+    p = sub.add_parser("evaluate", help="Precisión del motor según las etiquetas humanas")
+    p.add_argument("--version", help="Versión del algoritmo (por defecto la actual; «todas»)")
+    p.add_argument("--json", action="store_true", help="Salida en JSON")
+    p.set_defaults(func=cmd_evaluate)
 
     p = sub.add_parser("ai-status", help="Estado, límites y uso del análisis con IA")
     p.set_defaults(func=cmd_ai_status)

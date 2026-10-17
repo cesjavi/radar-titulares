@@ -51,6 +51,7 @@
             <a href="/historial" class="{{ 'active' if nav == 'historial' }}">📜 Historial</a>
             {% endif %}
             <a href="/metricas" class="{{ 'active' if nav == 'metricas' }}">📈 Métricas</a>
+            {% if user.can_analyze %}<a href="/evaluacion" class="{{ 'active' if nav == 'evaluacion' }}">🎯 Evaluación del motor</a>{% endif %}
             <a href="/fuentes" class="{{ 'active' if nav == 'fuentes' }}">🌐 Fuentes</a>
             {% if not user.is_anonymous %}<a href="/ejecuciones" class="{{ 'active' if nav == 'ejecuciones' }}">⚙️ Ejecuciones</a>{% endif %}
             {% if user.is_admin %}<a href="/configuracion" class="{{ 'active' if nav == 'configuracion' }}">🔧 Configuración</a>

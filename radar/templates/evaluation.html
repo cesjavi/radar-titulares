@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Evaluación del motor · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Evaluación del motor</h1>
+<p class="small muted">Marcá si cada relación que detectó el motor léxico es correcta para su tipo. Las relaciones salen de una muestra repartida por tipo y por puntaje (hasta {{ target }} por tipo), y el puntaje no se muestra para no influir en la respuesta. Las etiquetas no cambian la revisión, las alertas ni los grupos: solo sirven para medir.</p>
+
+{% if rel %}
+<section class="card">
+  <h2>{{ question }}</h2>
+  <p class="small muted">Tipo detectado: {{ label }}</p>
+  {% if rel.relation_type == 'expresion_compartida' and frases %}
+  <p class="small">Expresión compartida: {% for f in frases %}<mark>{{ f }}</mark>{% if not loop.last %} · {% endif %}{% endfor %}</p>
+  {% endif %}
+  <div class="compare">
+    {% for a in (rel.article_a, rel.article_b) %}
+    <article class="card">
+      <p class="muted small"><span class="media-tag">{{ a.media.name }}</span>{% if a.section %} · {{ a.section }}{% endif %} · {{ fmt_pub(a) }}</p>
+      <h3>{{ a.title }}</h3>
+      {% if a.subtitle %}<p class="small">{{ a.subtitle }}</p>{% endif %}
+      {% if not a.is_demo and (a.url.startswith('https://') or a.url.startswith('http://')) %}<p class="small"><a href="{{ a.url }}" target="_blank" rel="noopener noreferrer nofollow">Abrir nota original ↗</a></p>{% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  <form method="post" action="/evaluacion/{{ rel.id }}" class="row-buttons">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" name="etiqueta" value="correcta" class="btn">Sí, es correcta</button>
+    <button type="submit" name="etiqueta" value="incorrecta" class="btn btn-ghost">No, es incorrecta</button>
+    <button type="submit" name="etiqueta" value="dudosa" class="btn btn-ghost">No sé</button>
+  </form>
+</section>
+{% else %}
+<section class="card">
+  <p class="muted">No quedan relaciones para etiquetar en la versión {{ version }}: se completó la muestra o todavía no hay relaciones pendientes de revisión.</p>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Precisión medida (versión {{ version }})</h2>
+  {% if report.total.n %}
+  <table class="table responsive">
+    <thead><tr><th>Tipo</th><th>Precisión</th><th>Intervalo 95 %</th><th>Casos</th></tr></thead>
+    <tbody>
+    {% for t, c in report.by_type.items() %}
+    <tr>
+      <td data-label="Tipo">{{ labels.get(t, t) }}</td>
+      <td data-label="Precisión" class="num">{{ '%.0f' | format(c.precision * 100) }} %</td>
+      <td data-label="Intervalo 95 %" class="num">{{ '%.0f' | format(c.interval[0] * 100) }}–{{ '%.0f' | format(c.interval[1] * 100) }} %</td>
+      <td data-label="Casos" class="num">{{ c.n }} <span class="small muted">({{ c.incorrect }} incorrecta{{ 's' if c.incorrect != 1 }})</span></td>
+    </tr>
+    {% endfor %}
+    <tr>
+      <td data-label="Tipo"><strong>Total</strong></td>
+      <td data-label="Precisión" class="num"><strong>{{ '%.0f' | format(report.total.precision * 100) }} %</strong></td>
+      <td data-label="Intervalo 95 %" class="num">{{ '%.0f' | format(report.total.interval[0] * 100) }}–{{ '%.0f' | format(report.total.interval[1] * 100) }} %</td>
+      <td data-label="Casos" class="num">{{ report.total.n }}</td>
+    </tr>
+    </tbody>
+  </table>
+  <details>
+    <summary class="small">Por tramo de puntaje</summary>
+    <table class="table responsive">
+      <thead><tr><th>Tipo</th><th>Puntaje</th><th>Precisión</th><th>Casos</th></tr></thead>
+      <tbody>
+      {% for (t, b), c in report.by_bucket.items() %}
+      <tr>
+        <td data-label="Tipo">{{ labels.get(t, t) }}</td><td data-label="Puntaje">{{ b }}</td>
+        <td data-label="Precisión" class="num">{{ '%.0f' | format(c.precision * 100) }} %</td>
+        <td data-label="Casos" class="num">{{ c.n }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  <p class="small muted">Con pocos casos el intervalo es amplio: mirá siempre la cantidad. Cuentan las etiquetas de esta pantalla y las revisiones del administrador; si varias personas etiquetan la misma relación, manda la mayoría. Sin decidir: {{ report.unsure }} · con desacuerdo: {{ report.disagreements }}. Esto mide cuántas relaciones detectadas están bien (precisión), no las que el motor no encontró.</p>
+  {% else %}
+  <p class="muted">Todavía no hay etiquetas para esta versión.</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -336,6 +336,27 @@ class ArticleRelation(Base):
     article_b: Mapped[Article] = relationship(foreign_keys=[article_b_id])
 
 
+class RelationLabel(Base):
+    """Etiqueta humana de una relación de la muestra de evaluación (correcta / incorrecta /
+    dudosa). Aparte de `review_status`: no dispara alertas ni IA. Copia tipo, puntaje y versión
+    para que la medición sobreviva al reprocesamiento y a la retención: `relation_id` no es clave
+    foránea (como `manual_reviews.target_id`), así las etiquetas de una relación borrada siguen
+    agrupadas."""
+
+    __tablename__ = "relation_labels"
+    __table_args__ = (UniqueConstraint("relation_id", "user_id"),
+                      Index("ix_relation_labels_version", "algorithm_version"))
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    relation_id: Mapped[int] = mapped_column(Integer)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    label: Mapped[str] = mapped_column(String(16))
+    relation_type: Mapped[str] = mapped_column(String(32))
+    score: Mapped[float | None] = mapped_column(Float)
+    algorithm_version: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Topic(Base):
     """Tema de seguimiento configurable (palabras clave)."""
 

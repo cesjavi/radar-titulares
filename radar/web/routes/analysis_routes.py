@@ -21,6 +21,7 @@ from radar.ai.service import (
     latest_for_group,
     pair_filter,
 )
+from radar.analysis import ALGORITHM_VERSION, evaluation
 from radar.analysis.manual import (
     ManualError,
     merge_groups,
@@ -367,6 +368,36 @@ def group_merge(group_id: int, other_id: int = Form(...), note: str = Form("", m
         return RedirectResponse(f"/grupos/{group_id}?error={quote('El otro grupo no existe.')}",
                                 status_code=303)
     return _group_action(group_id, db, lambda g: merge_groups(db, g, other, user, note))
+
+
+@router.get("/evaluacion")
+def evaluation_page(request: Request, db: Session = Depends(get_db),
+                    user: User = Depends(require_analyst)):
+    """Muestra estratificada para medir la precisión del motor, de a una relación."""
+    rel = evaluation.next_for_labeling(db, user, include_demo=demo_visible(request))
+    evidence = _json(rel.evidence, {}) if rel else {}
+    return render(request, "evaluation.html", {
+        "rel": rel, "frases": evidence.get("frases", []),
+        "question": evaluation.QUESTIONS.get(rel.relation_type, "¿Es correcta esta relación?")
+        if rel else None,
+        "label": TYPE_LABELS.get(rel.relation_type, rel.relation_type) if rel else None,
+        "report": evaluation.precision_report(db), "labels": TYPE_LABELS,
+        "choices": evaluation.LABELS, "target": evaluation.TARGET_PER_TYPE,
+        "version": ALGORITHM_VERSION, "nav": "evaluacion",
+    }, user=user)
+
+
+@router.post("/evaluacion/{rel_id}", dependencies=[Depends(verify_csrf)])
+def evaluation_label(rel_id: int, etiqueta: str = Form(..., max_length=16),
+                     db: Session = Depends(get_db), user: User = Depends(require_analyst)):
+    rel = db.get(ArticleRelation, rel_id)
+    if rel is None:
+        raise HTTPException(status_code=404, detail="La relación no existe.")
+    try:
+        evaluation.save_label(db, rel, user, etiqueta)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse("/evaluacion", status_code=303)
 
 
 @router.get("/sentimiento")
