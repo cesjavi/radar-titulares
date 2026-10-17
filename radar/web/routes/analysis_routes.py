@@ -44,7 +44,15 @@ from radar.models import (
     StoryGroupMember,
     User,
 )
-from radar.web.deps import demo_visible, get_db, render, require_admin, verify_csrf, viewer
+from radar.web.deps import (
+    demo_visible,
+    get_db,
+    render,
+    require_admin,
+    require_analyst,
+    verify_csrf,
+    viewer,
+)
 
 router = APIRouter()
 PER_PAGE = 30
@@ -316,7 +324,7 @@ def _group_action(group_id: int, db: Session, fn):
 
 @router.post("/grupos/{group_id}/analizar-ia", dependencies=[Depends(verify_csrf)])
 def group_ai_analyze(group_id: int, db: Session = Depends(get_db),
-                     user: User = Depends(require_admin)):
+                     user: User = Depends(require_analyst)):
     """Analiza con IA todas las notas activas del grupo en una sola llamada."""
     group = _load_group(db, group_id)
     message = analyze_group_for_admin(db, group)
@@ -326,7 +334,7 @@ def group_ai_analyze(group_id: int, db: Session = Depends(get_db),
 @router.post("/grupos/{group_id}/ocultar", dependencies=[Depends(verify_csrf)])
 def group_hide(group_id: int, request: Request, ocultar: bool = Form(True),
                volver: str = Form("", max_length=500),
-               db: Session = Depends(get_db), user: User = Depends(require_admin)):
+               db: Session = Depends(get_db), user: User = Depends(require_analyst)):
     group = _load_group(db, group_id)
     set_group_hidden(db, group, ocultar, user)
     # Solo se vuelve a una ruta propia del panel (nada de URLs externas).

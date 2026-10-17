@@ -96,6 +96,7 @@ Los datos demo usan dominios `.invalid`, se marcan con la insignia DEMO y un avi
 |---|---|
 | `python -m radar init-db` | Aplica las migraciones (`alembic upgrade head`) y carga fuentes y temas. Se puede repetir sin problema. |
 | `python -m radar create-admin USUARIO [--password-stdin]` | Crea un administrador. |
+| `python -m radar create-user USUARIO [--role analizador\|admin] [--password-stdin]` | Crea un usuario con perfil (por defecto, analizador). También se hace desde Configuración → Usuarios. |
 | `python -m radar set-password USUARIO [--password-stdin]` | Cambia la contraseña y cierra las sesiones abiertas. |
 | `python -m radar collect` | Recolecta una vez todas las subfuentes cuyo intervalo mínimo ya venció. |
 | `python -m radar collect --media perfil\|eldestape\|infobae\|pagina12` | Recolecta un solo medio. |
@@ -253,7 +254,8 @@ Se leen con la **vista web pública** de cada canal (`https://t.me/s/<canal>`): 
 - **Lo que no significa:** un posteo **no es un medio independiente** ni confirma una nota; un reenvío es una réplica; la coincidencia es léxica y el orden de las horas no indica origen ni coordinación. La diferencia de hora solo se muestra si la nota tiene hora.
 - **Volumen:** estos canales publican pocas veces por semana, así que en una ventana de 72 h suele haber pocos posteos y pocos vínculos. Los posteos se conservan `RADAR_SOCIAL_RETENTION_DAYS` días (30 por defecto, editable en el panel). `RADAR_SOCIAL_ENABLED=false` apaga la recolección.
 - **X (Twitter) no se recolecta:** `x.com/robots.txt` y `syndication.twitter.com/robots.txt` tienen `Disallow: /` para clientes automáticos, y sus términos prohíben el scraping. Lo único que se usa son los enlaces a posteos de X que ya traen los mensajes de Telegram: la pantalla Redes muestra «Cita un posteo de X» y las cuentas de X más citadas, y el texto de la vista previa entra al cruce con las notas. Para recolectar X de verdad haría falta su API oficial (paga) o un acceso autorizado.
-- Modelo: tablas `social_accounts`, `social_posts` y `post_article_links` (migración `0008`).
+- **Extensión de Chrome para X** (proyecto aparte, [`radar-x-extension`](../radar-x-extension/README.md)): mientras navegás X con tu sesión, guarda los posteos que la página ya recibió (perfiles, búsquedas, listas, hilos) y los manda al panel, local o en Vercel. No hace pedidos propios a X ni navega sola. Se conecta con un token que se crea en **Configuración → Extensión de Chrome para X** (se muestra una sola vez y se puede revocar). Los posteos quedan igual que con el archivo de twitter-web-exporter: importados a mano y sin verificar.
+- Modelo: tablas `social_accounts`, `social_posts` y `post_article_links` (migración `0008`); `api_tokens` (migración `0011`).
 
 ## Análisis con IA externa (opcional)
 
@@ -381,7 +383,7 @@ Con `RADAR_PUBLIC_MODE=true`, cualquiera puede ver el panel **en modo de solo le
 
 - Contraseñas con Argon2id (64 MiB y 3 iteraciones), mínimo 12 caracteres.
 - Sesión firmada en la cookie `radar_session`: HttpOnly, SameSite=Lax y Secure cuando `RADAR_ENV=production`. Se renueva al ingresar, y al cambiar la contraseña se invalidan las demás sesiones (`session_version`).
-- Token CSRF sincronizado en todos los POST, sea por campo del formulario o por el encabezado `X-CSRF-Token` que agrega HTMX.
+- Token CSRF sincronizado en todos los POST, sea por campo del formulario o por el encabezado `X-CSRF-Token` que agrega HTMX. La API de la extensión (`/api/x/*`) no usa la cookie sino `Authorization: Bearer`, con tokens de 256 bits guardados como SHA-256, revocables y atados a un usuario activo.
 - Límite de intentos de login: 5 fallos cada 15 minutos por IP+usuario y 20 por IP. Los intentos se guardan en la base, así que el límite sobrevive a los reinicios.
 - Jinja2 escapa automáticamente el contenido externo. El CSP es estricto (sin scripts ni estilos inline), con `X-Frame-Options: DENY` y HSTS en producción.
 - Los XML se parsean con `defusedxml`, y no se aceptan URLs de artículos que no sean http/https.

@@ -44,8 +44,13 @@ def cmd_init_db(_args) -> int:
 
 
 def cmd_create_admin(args) -> int:
+    args.role = "admin"
+    return cmd_create_user(args)
+
+
+def cmd_create_user(args) -> int:
     from radar.db import session_scope
-    from radar.models import User
+    from radar.models import ROLES, User
     from radar.security import hash_password
 
     username = args.username.strip()
@@ -58,8 +63,8 @@ def cmd_create_admin(args) -> int:
     with session_scope() as db:
         if db.scalar(select(User).where(User.username == username)):
             raise SystemExit(f"El usuario '{username}' ya existe. Usá set-password.")
-        db.add(User(username=username, password_hash=pw_hash, is_admin=True))
-    print(f"Administrador '{username}' creado.")
+        db.add(User(username=username, password_hash=pw_hash, role=args.role))
+    print(f"Usuario '{username}' creado con perfil {ROLES[args.role]}.")
     return 0
 
 
@@ -407,6 +412,12 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--password-stdin", action="store_true",
                        help="Leer la contraseña de la entrada estándar (para automatizar)")
         p.set_defaults(func=fn)
+    p = sub.add_parser("create-user", help="Crear un usuario con perfil (admin o analizador)")
+    p.add_argument("username")
+    p.add_argument("--role", choices=("admin", "analizador"), default="analizador")
+    p.add_argument("--password-stdin", action="store_true",
+                   help="Leer la contraseña de la entrada estándar (para automatizar)")
+    p.set_defaults(func=cmd_create_user)
 
     p = sub.add_parser("collect", help="Recolectar titulares de las fuentes habilitadas")
     p.add_argument("--media", help="Recolectar solo este medio (slug)")

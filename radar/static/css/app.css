@@ -114,6 +114,7 @@ h3 { font-size: 1.05rem; }
 
 code, .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; }
 code { background: var(--surface-alt); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+code.token-value { display: inline-block; word-break: break-all; user-select: all; }
 
 .container { max-width: 1240px; margin: 0 auto; padding: var(--gap); }
 .footer { max-width: 1240px; margin: 0 auto; padding: 12px var(--gap) 32px; color: var(--muted); font-size: .85rem; text-align: center; }

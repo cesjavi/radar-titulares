@@ -326,6 +326,19 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - **X (Twitter):** verificado el 2026-10-05: `x.com/robots.txt` (`User-agent: *` → `Disallow: /`) y `syndication.twitter.com` (`Disallow: /`, además 429) lo impiden; no se recolecta. Se extraen solo las referencias a posteos de X que ya traen los mensajes de Telegram (`radar/social/references.py`).
 - Pendiente: nivel de "mismo tema" para posteos (más laxo), detección de texto repetido entre cuentas, y referencias a Instagram/Facebook.
 
+### Agregado: extensión de Chrome para X (2026-10-15)
+- Proyecto aparte `../radar-x-extension` (Manifest V3, sin dependencias): un script en el mundo de la página lee las respuestas GraphQL que X ya recibe (`fetch` y `XMLHttpRequest`), `extract.js` las convierte al formato plano de twitter-web-exporter (salteando avisos, con el texto completo de los posteos largos y los retuits marcados) y el service worker las guarda sin repetir y las envía en lotes de hasta 300 posteos / 2 MB. Popup con pausa, envío manual u opcional cada 10 minutos, descarga en JSON (compatible con `import-x`) y vaciado.
+- Servidor: `GET /api/x/estado` y `POST /api/x/posteos` (`radar/web/routes/api_routes.py`), tokens en `api_tokens` (migración `0011`), alta y revocación en Configuración, `x_import.parse_rows`. Vincula con notas solo en el último lote de cada envío.
+- Decisión: es compatible con la regla de no conectarse a X porque la extensión no hace pedidos propios ni automatiza el navegador; solo reenvía lo que la persona ya está viendo.
+- **Verificado:** 7 pruebas nuevas del lado servidor (token mostrado una vez y guardado con hash, revocación, usuario inactivo o sin rol de administrador, idempotencia, validación del cuerpo); 5 pruebas de Node con respuestas GraphQL sintéticas; y el contrato extensión → `parse_rows` con una salida real de `extract.js`.
+- **No verificado:** la captura contra x.com real (depende de la forma actual de sus respuestas GraphQL) y la extensión cargada en Chrome contra Vercel.
+
+### Agregado: perfiles de usuario (2026-10-17)
+- `users.role` (migración `0012`): `admin` y `analizador`. Los usuarios existentes con `is_admin` pasan a `admin`; el resto, a `analizador`.
+- El analizador ve el panel, analiza grupos con IA (`/grupos/{id}/analizar-ia`) y los oculta o vuelve a mostrar en el resumen (`/grupos/{id}/ocultar`). Revisiones, correcciones de grupos, IA de pares, fuentes y configuración siguen siendo del administrador. Tiene «Mi cuenta» (`/configuracion/cuenta`) para cambiar su contraseña.
+- Configuración → Usuarios: alta, cambio de perfil, activar/desactivar y nueva contraseña (cierra sus sesiones). Nadie puede quitarse el perfil de administrador ni desactivarse. CLI: `create-user USUARIO --role`.
+- Decisión: `is_admin` se conserva como columna sincronizada con `role` (validador del modelo) para que el código anterior siga andando si la migración se aplica antes del despliegue, como en Vercel.
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.

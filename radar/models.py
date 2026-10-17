@@ -19,7 +19,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from radar.timeutil import utcnow
 
@@ -510,6 +510,11 @@ class ManualReview(Base):
 # --- Usuarios y seguridad ------------------------------------------------------------
 
 
+# Perfiles de usuario. El analizador puede analizar grupos con IA y ocultarlos del resumen;
+# todo lo demás (configuración, fuentes, revisiones, correcciones) queda para el administrador.
+ROLES = {"admin": "Administrador", "analizador": "Analizador"}
+
+
 class User(Base):
     __tablename__ = "users"
     is_anonymous = False  # no es columna: distingue al visitante de la vista pública
@@ -517,12 +522,37 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(64), unique=True)
     password_hash: Mapped[str] = mapped_column(String(256))
+    role: Mapped[str] = mapped_column(String(16), default="analizador",
+                                      server_default="analizador")
+    # Derivado de `role` (lo mantiene `_sync_admin`); se conserva por compatibilidad.
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     # Se incrementa al cambiar la contraseña: invalida sesiones previas.
     session_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    def __init__(self, **kw):
+        if "role" not in kw:  # compatibilidad: User(is_admin=...)
+            kw["role"] = "admin" if kw.pop("is_admin", False) else "analizador"
+        else:
+            kw.pop("is_admin", None)
+        super().__init__(**kw)
+
+    @validates("role")
+    def _sync_admin(self, _key, value):
+        if value not in ROLES:
+            raise ValueError(f"Perfil desconocido: {value}")
+        self.is_admin = value == "admin"
+        return value
+
+    @property
+    def can_analyze(self) -> bool:
+        return self.role in ("admin", "analizador")
+
+    @property
+    def role_label(self) -> str:
+        return ROLES.get(self.role, self.role)
 
 
 class LoginAttempt(Base):
@@ -536,7 +566,24 @@ class LoginAttempt(Base):
     attempted_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
-# --- Análisis con IA externa (opcional) -------------------------------------------------
+class ApiToken(Base):
+    """Token para clientes sin sesión (la extensión de Chrome). Se guarda solo su SHA-256; el
+    valor se muestra una única vez al crearlo. Actúa con los permisos de su usuario."""
+
+    __tablename__ = "api_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    user: Mapped[User] = relationship()
+
+
+# --- Análisis con IA externa (opcional)-------------------------------------------------
 
 
 class AiAnalysis(Base):

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Mi cuenta · Radar de Titulares{% endblock %}
+{% block content %}
+<h1>Mi cuenta</h1>
+
+<section class="card" id="cuenta">
+  <p>Usuario <strong>{{ user.username }}</strong> · perfil <strong>{{ user.role_label }}</strong>.</p>
+  {% if user.role == 'analizador' %}<p class="small muted">Podés analizar grupos de notas con IA y ocultar grupos del resumen. La configuración, las fuentes y las revisiones quedan para un administrador.</p>{% endif %}
+  <h2>Cambiar contraseña</h2>
+  {% if pw_error %}<p class="alert alert-error">{{ pw_error }}</p>{% endif %}
+  {% if pw_ok %}<p class="alert alert-ok">{{ pw_ok }}</p>{% endif %}
+  <form method="post" action="/configuracion/cuenta/clave" class="stack narrow">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Contraseña actual <input type="password" name="current" autocomplete="current-password" required></label>
+    <label>Nueva contraseña (mín. {{ min_pw }} caracteres) <input type="password" name="new" autocomplete="new-password" required minlength="{{ min_pw }}"></label>
+    <label>Repetir nueva <input type="password" name="confirm" autocomplete="new-password" required minlength="{{ min_pw }}"></label>
+    <button type="submit" class="btn">Actualizar</button>
+  </form>
+  <p class="muted small">Al cambiarla se cierran las demás sesiones abiertas.</p>
+</section>
+{% endblock %}

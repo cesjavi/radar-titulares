@@ -9,7 +9,7 @@
     {% if g.locked %}<span class="badge badge-skipped">con correcciones manuales</span>{% endif %}
     {% if g.hidden_at %}<span class="badge badge-skipped">oculto del resumen</span>{% endif %}
   </div>
-  {% if user and user.is_admin %}
+  {% if user and user.can_analyze %}
   <form method="post" action="/grupos/{{ g.id }}/ocultar" class="inline-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="ocultar" value="{{ 'false' if g.hidden_at else 'true' }}">
@@ -92,7 +92,7 @@
   {% else %}
   <p class="muted">Sin análisis con IA para este grupo.{% if not ai_enabled %} La IA externa está desactivada (opcional).{% endif %}</p>
   {% endif %}
-  {% if user and user.is_admin and ai_enabled %}
+  {% if user and user.can_analyze and ai_enabled %}
   <form method="post" action="/grupos/{{ g.id }}/analizar-ia" class="inline-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="btn btn-ghost" {{ 'disabled' if ai_blocked or ai_note_count < 2 }}>{{ 'Volver a analizar' if ai else 'Analizar el grupo con IA' }}</button>

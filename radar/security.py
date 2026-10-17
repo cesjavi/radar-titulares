@@ -1,7 +1,8 @@
-"""Contraseñas (Argon2id), límite de intentos de login y tokens CSRF."""
+"""Contraseñas (Argon2id), límite de intentos de login, tokens CSRF y tokens de API."""
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import secrets
 from datetime import timedelta
@@ -11,7 +12,7 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from radar.models import LoginAttempt, User
+from radar.models import ApiToken, LoginAttempt, User
 from radar.timeutil import utcnow
 
 # Parámetros moderados de memoria (64 MiB) aptos para un VPS de 2 GB con un solo worker.
@@ -106,3 +107,38 @@ def csrf_tokens_match(expected: str | None, provided: str | None) -> bool:
     if not expected or not provided:
         return False
     return hmac.compare_digest(expected, provided)
+
+
+# --- Tokens de API (extensión de Chrome) -----------------------------------------------
+# Valores de 256 bits al azar: alcanza con SHA-256 (no hace falta Argon2) y la búsqueda por hash
+# no filtra nada útil por tiempo. Se guardan solo los hashes.
+
+API_TOKEN_PREFIX = "rdx_"
+MAX_API_TOKENS = 20
+
+
+def _api_token_hash(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def create_api_token(db: Session, user: User, name: str) -> tuple[ApiToken, str]:
+    """Crea un token y devuelve también su valor en claro (no se vuelve a poder ver)."""
+    raw = API_TOKEN_PREFIX + secrets.token_urlsafe(32)
+    token = ApiToken(name=name.strip()[:64] or "Extensión", token_hash=_api_token_hash(raw),
+                     user_id=user.id)
+    db.add(token)
+    db.flush()
+    return token, raw
+
+
+def authenticate_api_token(db: Session, raw: str | None) -> User | None:
+    """Usuario activo dueño de un token vigente, o None. Registra el último uso."""
+    raw = (raw or "").strip()
+    if not raw.startswith(API_TOKEN_PREFIX) or len(raw) > 128:
+        return None
+    token = db.scalar(select(ApiToken).where(ApiToken.token_hash == _api_token_hash(raw),
+                                             ApiToken.revoked_at.is_(None)))
+    if token is None or not token.user.is_active:
+        return None
+    token.last_used_at = utcnow()
+    return token.user

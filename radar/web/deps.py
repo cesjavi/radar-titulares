@@ -82,7 +82,9 @@ class Visitor:
 
     id = None
     username = "visitante"
+    role = None
     is_admin = False
+    can_analyze = False
     is_active = True
     is_anonymous = True
 
@@ -112,6 +114,13 @@ def demo_visible(request: Request) -> bool:
 
 def require_admin(user: User = Depends(require_user)) -> User:
     if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Permiso insuficiente.")
+    return user
+
+
+def require_analyst(user: User = Depends(require_user)) -> User:
+    """Analizador o administrador: analizar grupos con IA y ocultarlos del resumen."""
+    if not user.can_analyze:
         raise HTTPException(status_code=403, detail="Permiso insuficiente.")
     return user
 

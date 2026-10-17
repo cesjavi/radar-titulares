@@ -36,8 +36,8 @@ app.py + vercel.json   punto de entrada y configuración para Vercel (VERCEL.md)
                schema.py, service.py
   social/      telegram.py (parser de t.me/s), collector.py, match.py (posteo ↔ nota)
   notify/      telegram.py          maintenance.py (backup/retención)       metrics.py
-  web/         app.py, deps.py, routes/      templates/      static/
-alembic/versions/   0001 … 0008        deploy/   systemd, nginx, scripts
+  web/         app.py, deps.py, routes/ (api_routes.py: API de la extensión de Chrome)      templates/      static/
+alembic/versions/   0001 … 0012        deploy/   systemd, nginx, scripts
 tests/              fixtures/ (sintéticos)
 ```
 
@@ -65,7 +65,8 @@ Ver `skills.md` para la lista completa y qué hace cada una.
 - **Cambios de modelo → migración Alembic** nueva (`000N_nombre.py`, con `alembic revision --autogenerate` y renombrando el archivo). Compatible hacia atrás: agregar con valores por defecto.
 - **Cambios en las reglas del motor léxico → subir `ALGORITHM_VERSION`** (`radar/analysis/__init__.py`): se guarda en cada relación y grupo.
 - **Cambios en el prompt de IA → subir `PROMPT_VERSION`** (`radar/ai/__init__.py`); invalida la caché.
-- **Todo POST exige CSRF** (`verify_csrf`) y las acciones, rol administrador. Las rutas de lectura usan `viewer` (permite la vista pública si está activa) o `require_user`. El contenido externo se escapa siempre (Jinja2 autoescape; nunca `|safe` con datos de medios).
+- **Perfiles** (`User.role`, `radar.models.ROLES`): `admin` (todo) y `analizador`, que solo puede analizar grupos con IA y ocultarlos del resumen (`require_analyst`; en plantillas, `user.can_analyze`). `is_admin` sigue como columna, derivada de `role`: asignar siempre `role`, nunca `is_admin`. Los usuarios se gestionan en Configuración → Usuarios o con `create-user`; nadie puede quitarse a sí mismo el perfil de administrador.
+- **Todo POST exige CSRF** (`verify_csrf`) y las acciones, rol administrador (salvo las del analizador, arriba). Única excepción: `/api/x/*`, que se autentica con token y no con la cookie (ver «Redes sociales»). Las rutas de lectura usan `viewer` (permite la vista pública si está activa) o `require_user`. El contenido externo se escapa siempre (Jinja2 autoescape; nunca `|safe` con datos de medios).
 - **Red:** toda descarga pasa por `radar/net.py` (SSRF, dominios permitidos, redirecciones validadas, robots.txt, límites). No usar `httpx` directo para contenido de medios.
 - **Transacciones breves**; la recolección escribe en lotes y desde un solo hilo.
 - **Consultas y modelos portables entre SQLite y PostgreSQL.** No usar funciones propias de SQLite (por ejemplo `func.min(a, b)` de dos argumentos: usar `pair_filter`), ni `PRAGMA` fuera de `radar/db.py`. Los índices parciales llevan `sqlite_where` **y** `postgresql_where`. PostgreSQL sí aplica los largos de `String(n)` y SQLite no: truncar al guardar. Todo cambio de consultas, modelos o migraciones se prueba en **los dos** motores (`pytest` y `pytest` con `RADAR_TEST_PG_URL`); las pruebas que usan archivos o funciones de SQLite van con `@pytest.mark.sqlite_only`, y las que exigen `pg_dump`, con `pg_only`.
@@ -96,6 +97,7 @@ Ver `skills.md` para la lista completa y qué hace cada una.
 - Solo canales públicos de Telegram por su vista web (`t.me/s/<canal>`), vía `radar/net.py`. **No** agregar scraping con login, proxies rotativos ni evasión de antibot para X, Meta o TikTok: violan sus términos y la regla de `net.py`. X en particular tiene `Disallow: /` (verificado): solo se leen las referencias a sus posteos que ya traen los mensajes de Telegram.
 - Un posteo **no es un medio independiente** (no suma a `independent_media_count`), un reenvío es una réplica y la coincidencia con una nota es léxica. No escribir que una cuenta "originó" o "coordinó" algo.
 - **Importación manual de X:** `radar/social/x_import.py` lee un JSON/CSV exportado por el usuario con [twitter-web-exporter](https://github.com/prinsss/twitter-web-exporter) (panel «Redes» → «Importar posteos de X», o `python -m radar import-x ARCHIVO`). Radar **no se conecta a X**; no automatizar el userscript ni un navegador con sesión. Las cuentas son `platform="x"`, los posteos quedan «importados a mano / sin verificar» y se vinculan con notas con el mismo motor léxico (solo últimas 72 h). Un retuit es una réplica; la hora se guarda solo si el archivo la trae.
+- **Extensión de Chrome** (proyecto aparte, `../radar-x-extension`): captura **pasivamente** las respuestas GraphQL que X ya le manda al navegador de la persona mientras mira, y las envía a `POST /api/x/posteos` con un token (`Authorization: Bearer rdx_…`, creado en Configuración → Extensión de Chrome para X; tabla `api_tokens`, solo el SHA-256). Es la misma importación manual de `x_import` (`parse_rows`) sin pasar por un archivo. La extensión **no** hace pedidos propios a X, no desplaza la página, no abre pestañas ni navega sola: no agregarle nada de eso. Las rutas `/api/x/*` no llevan CSRF porque no usan la cookie de sesión; exigen un token vigente de un usuario activo y administrador para importar. El formato de las filas (el de twitter-web-exporter) es el contrato entre ambos proyectos: si cambia `x_import`, revisar `src/extract.js` de la extensión.
 - `run_collection(social=...)` es opt-in (la CLI y `pipeline.collect_phase` lo activan) para no tocar las pruebas de medios. Canales por defecto: `seed_social_accounts` (una sola vez; `force` agrega los que falten).
 
 ## Estado de verificación

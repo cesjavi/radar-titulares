@@ -3,7 +3,7 @@
 Radar NO se conecta a X: ni API, ni cuentas, ni cookies, ni navegador automatizado (su
 `robots.txt` y sus términos lo prohíben). Una persona usa el userscript en su propio navegador,
 exporta un archivo y lo sube al panel (o lo pasa a `python -m radar import-x`). Acá solo se lee ese
-archivo.
+archivo. La extensión de Chrome (`radar/web/routes/api_routes.py`) manda las mismas filas en JSON.
 
 Reglas de producto que se mantienen:
 - Es material importado a mano y sin verificar: el posteo pudo editarse o borrarse después.
@@ -193,7 +193,13 @@ def _rows(content: bytes, filename: str) -> list[dict]:
 
 
 def parse_export(content: bytes, filename: str = "") -> ParseResult:
-    rows = _rows(content, filename)
+    return parse_rows(_rows(content, filename))
+
+
+def parse_rows(rows: list) -> ParseResult:
+    """Filas ya decodificadas (la extensión de Chrome las manda en JSON con el mismo formato
+    plano que twitter-web-exporter)."""
+    rows = [r for r in rows if isinstance(r, dict)]
     if not rows:
         raise XImportError("El archivo no trae posteos.")
     if len(rows) > MAX_ITEMS:

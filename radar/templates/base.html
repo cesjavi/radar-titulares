@@ -53,7 +53,8 @@
             <a href="/metricas" class="{{ 'active' if nav == 'metricas' }}">📈 Métricas</a>
             <a href="/fuentes" class="{{ 'active' if nav == 'fuentes' }}">🌐 Fuentes</a>
             {% if not user.is_anonymous %}<a href="/ejecuciones" class="{{ 'active' if nav == 'ejecuciones' }}">⚙️ Ejecuciones</a>{% endif %}
-            {% if user.is_admin %}<a href="/configuracion" class="{{ 'active' if nav == 'configuracion' }}">🔧 Configuración</a>{% endif %}
+            {% if user.is_admin %}<a href="/configuracion" class="{{ 'active' if nav == 'configuracion' }}">🔧 Configuración</a>
+            {% elif not user.is_anonymous %}<a href="/configuracion/cuenta" class="{{ 'active' if nav == 'cuenta' }}">👤 Mi cuenta</a>{% endif %}
           </div>
         </div>
 

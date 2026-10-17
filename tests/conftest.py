@@ -96,14 +96,15 @@ def db():
     session.close()
 
 
-def make_user(username="admin", password=ADMIN_PASSWORD, is_admin=True, is_active=True):
+def make_user(username="admin", password=ADMIN_PASSWORD, is_admin=True, is_active=True,
+              role=None):
     from radar.db import session_scope
     from radar.models import User
     from radar.security import hash_password
 
     with session_scope() as s:
         user = User(username=username, password_hash=hash_password(password),
-                    is_admin=is_admin, is_active=is_active)
+                    role=role or ("admin" if is_admin else "analizador"), is_active=is_active)
         s.add(user)
         s.flush()
         return user.id

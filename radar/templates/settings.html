@@ -237,6 +237,43 @@
   </form>
 </section>
 
+<section class="card" id="extension">
+  <h2>Extensión de Chrome para X</h2>
+  <p class="small muted">La extensión <strong>Radar · Captura de X</strong> guarda los posteos que X ya te muestra mientras navegás (perfiles, búsquedas, listas) y los manda acá. No hace pedidos propios a X, no desplaza la página ni abre pestañas: solo captura lo que mirás. Los posteos quedan como <em>importados a mano</em> y sin verificar, igual que al subir un archivo. En la extensión cargá la dirección de este panel y un token.</p>
+  {% if token_error %}<p class="alert alert-error">{{ token_error }}</p>{% endif %}
+  {% if new_token %}
+  <div class="alert alert-ok">
+    <p>Token «{{ new_token_name }}» creado. Copialo ahora: <strong>no se vuelve a mostrar</strong>.</p>
+    <p><code class="token-value">{{ new_token }}</code></p>
+  </div>
+  {% endif %}
+  {% if api_tokens %}
+  <table class="table">
+    <thead><tr><th>Nombre</th><th>Usuario</th><th>Creado</th><th>Último uso</th><th></th></tr></thead>
+    <tbody>
+    {% for t in api_tokens %}
+    <tr>
+      <td>{{ t.name }}</td><td>{{ t.user.username }}</td>
+      <td>{{ t.created_at | local_dt }}</td><td>{{ t.last_used_at | local_dt }}</td>
+      <td><form method="post" action="/configuracion/tokens/{{ t.id }}/revocar" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-small btn-ghost">Revocar</button>
+      </form></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No hay tokens activos.</p>
+  {% endif %}
+  <form method="post" action="/configuracion/tokens" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Nombre <input name="name" maxlength="64" placeholder="Chrome de la oficina"></label>
+    <button type="submit" class="btn">Crear token</button>
+  </form>
+  <p class="small muted">El token actúa con tus permisos de administrador: guardalo como una contraseña y revocalo si perdés el equipo.</p>
+</section>
+
 <section class="card" id="publica">
   <h2>Vista pública</h2>
   <p class="small muted">Con la vista pública activa, cualquier persona puede ver Resumen, Noticias, Grupos, Cronología, Métricas y Fuentes en solo lectura, sin iniciar sesión. Nunca se muestran notas de revisión, errores internos ni análisis de IA sin confirmar. Se aplica en unos segundos.</p>
@@ -285,6 +322,49 @@
     <p class="small muted">Cada análisis es una llamada al proveedor y puede tener costo. Con una prioridad mínima distinta de «baja», solo se analizan pares de alertas pendientes de esa prioridad o mayor. Un par puede usar hasta dos solicitudes (se reintenta una vez si las citas no coinciden).</p>
     <button type="submit" class="btn">Guardar</button>
   </form>
+</section>
+
+<section class="card" id="usuarios">
+  <h2>Usuarios</h2>
+  <p class="small muted">Perfiles: <strong>Administrador</strong> (todo el panel) y <strong>Analizador</strong> (puede ver el panel, analizar grupos de notas con IA y ocultar grupos del resumen; no cambia la configuración, las fuentes ni las revisiones).</p>
+  {% if user_error %}<p class="alert alert-error" role="alert">{{ user_error }}</p>{% endif %}
+  <table class="table responsive">
+    <thead><tr><th>Usuario</th><th>Perfil</th><th>Último ingreso</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+    <tr id="usuario-{{ u.id }}">
+      <td data-label="Usuario">{{ u.username }}{% if u.id == user.id %} <span class="small muted">(vos)</span>{% endif %}{% if not u.is_active %} <span class="badge badge-skipped">inactivo</span>{% endif %}</td>
+      <td data-label="Perfil">{{ u.role_label }}</td>
+      <td data-label="Último ingreso">{{ u.last_login_at | local_dt }}</td>
+      <td>
+        <details>
+          <summary class="small">Editar</summary>
+          <form method="post" action="/configuracion/usuarios/{{ u.id }}" class="stack">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <label>Perfil
+              <select name="role">{% for k, label in roles.items() %}<option value="{{ k }}" {{ 'selected' if u.role == k }}>{{ label }}</option>{% endfor %}</select>
+            </label>
+            <label class="inline"><input type="checkbox" name="is_active" {{ 'checked' if u.is_active }}> Activo</label>
+            <label>Nueva contraseña (opcional, mín. {{ min_pw }}) <input type="password" name="password" autocomplete="new-password" minlength="{{ min_pw }}"></label>
+            <button type="submit" class="btn btn-small">Guardar</button>
+          </form>
+        </details>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/configuracion/usuarios" class="stack narrow">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <h3>Agregar usuario</h3>
+    <label>Usuario <input name="username" maxlength="64" required pattern="[A-Za-z0-9._\-]{2,64}" autocomplete="off"></label>
+    <label>Contraseña (mín. {{ min_pw }} caracteres) <input type="password" name="password" autocomplete="new-password" required minlength="{{ min_pw }}"></label>
+    <label>Perfil
+      <select name="role">{% for k, label in roles.items() %}<option value="{{ k }}" {{ 'selected' if k == 'analizador' }}>{{ label }}</option>{% endfor %}</select>
+    </label>
+    <button type="submit" class="btn">Crear usuario</button>
+  </form>
+  <p class="small muted">Al cambiar la contraseña de alguien se cierran sus sesiones abiertas. Un usuario inactivo no puede ingresar y sus tokens dejan de funcionar.</p>
 </section>
 
 <section class="card" id="cuenta">

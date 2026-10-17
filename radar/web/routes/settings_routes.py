@@ -13,7 +13,7 @@ from radar import manual_run, runtime
 from radar.config import get_settings
 from radar.alerts.config import DEFAULTS as ALERT_DEFAULTS
 from radar.alerts.config import PRIORITIES, raw_settings, save_settings
-from radar.models import AppSetting, Media, SocialAccount, Topic, User
+from radar.models import ROLES, ApiToken, AppSetting, Media, SocialAccount, Topic, User
 from radar.notify import telegram
 from radar.ai.config import (
     BOOL_FIELDS,
@@ -30,7 +30,7 @@ from radar.ai.service import usage_today as ai_usage_today
 from radar.seed import get_setting
 from radar.security import MIN_PASSWORD_LENGTH, hash_password, verify_password
 from radar.text import normalize_for_search
-from radar.web.deps import get_db, render, require_admin, verify_csrf
+from radar.web.deps import get_db, render, require_admin, require_user, verify_csrf
 
 router = APIRouter(prefix="/configuracion")
 
@@ -68,7 +68,10 @@ def _page(request, db, user, status_code: int = 200, **extra):
            "run_ai_max": manual_run.AI_LIMIT_MAX, "run_serverless": get_settings().serverless,
            "social_accounts": db.scalars(select(SocialAccount).order_by(SocialAccount.name)).all(),
            "social_kinds": {"persona": "Persona", "organizacion": "Organización",
-                            "medio": "Medio"}}
+                            "medio": "Medio"},
+           "api_tokens": db.scalars(select(ApiToken).where(ApiToken.revoked_at.is_(None))
+                                    .order_by(ApiToken.created_at.desc())).all(),
+           "users": db.scalars(select(User).order_by(User.username)).all(), "roles": ROLES}
     ctx.update(extra)
     return render(request, "settings.html", ctx, status_code=status_code, user=user)
 
@@ -249,24 +252,95 @@ def run_state(request: Request, db: Session = Depends(get_db),
                   {"run_state": manual_run.last_state(db)}, user=user)
 
 
+USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{2,64}$")
+
+
+@router.post("/usuarios", dependencies=[Depends(verify_csrf)])
+def user_create(
+    request: Request,
+    username: str = Form(..., max_length=64),
+    password: str = Form(..., max_length=256),
+    role: str = Form("analizador", max_length=16),
+    db: Session = Depends(get_db), user: User = Depends(require_admin),
+):
+    username = username.strip()
+    if not USERNAME_RE.match(username):
+        return _page(request, db, user, 400, user_error=(
+            "El usuario debe tener entre 2 y 64 caracteres: letras, números, punto, guion o guion bajo."))
+    if role not in ROLES:
+        return _page(request, db, user, 400, user_error="Perfil desconocido.")
+    if db.scalar(select(User).where(User.username == username)):
+        return _page(request, db, user, 400, user_error=f"El usuario «{username}» ya existe.")
+    try:
+        pw_hash = hash_password(password)
+    except ValueError as exc:
+        return _page(request, db, user, 400, user_error=str(exc))
+    db.add(User(username=username, password_hash=pw_hash, role=role))
+    return RedirectResponse("/configuracion#usuarios", status_code=303)
+
+
+@router.post("/usuarios/{user_id}", dependencies=[Depends(verify_csrf)])
+def user_update(
+    request: Request,
+    user_id: int,
+    role: str = Form(..., max_length=16),
+    is_active: str | None = Form(None),
+    password: str = Form("", max_length=256),
+    db: Session = Depends(get_db), user: User = Depends(require_admin),
+):
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Usuario inexistente.")
+    if role not in ROLES:
+        return _page(request, db, user, 400, user_error="Perfil desconocido.")
+    active = is_active == "on"
+    # Así nunca se queda el panel sin un administrador activo.
+    if target.id == user.id and (role != "admin" or not active):
+        return _page(request, db, user, 400, user_error=(
+            "No podés quitarte el perfil de administrador ni desactivar tu propio usuario."))
+    if password:
+        try:
+            target.password_hash = hash_password(password)
+        except ValueError as exc:
+            return _page(request, db, user, 400, user_error=str(exc))
+        target.session_version += 1  # cierra sus sesiones abiertas
+        if target.id == user.id:
+            request.session["sv"] = target.session_version
+    target.role = role
+    target.is_active = active
+    return RedirectResponse(f"/configuracion#usuario-{target.id}", status_code=303)
+
+
+def _account_page(request, db, user, status_code: int = 200, **extra):
+    """La contraseña propia se cambia desde Configuración (admin) o desde «Mi cuenta»."""
+    if user.is_admin:
+        return _page(request, db, user, status_code, **extra)
+    return render(request, "account.html", {"nav": "cuenta", "min_pw": MIN_PASSWORD_LENGTH,
+                                            **extra}, status_code=status_code, user=user)
+
+
+@router.get("/cuenta")
+def account_page(request: Request, db: Session = Depends(get_db),
+                 user: User = Depends(require_user)):
+    return _account_page(request, db, user)
+
+
 @router.post("/cuenta/clave", dependencies=[Depends(verify_csrf)])
 def change_password(
     request: Request,
     current: str = Form(..., max_length=256),
     new: str = Form(..., max_length=256),
     confirm: str = Form(..., max_length=256),
-    db: Session = Depends(get_db), user: User = Depends(require_admin),
+    db: Session = Depends(get_db), user: User = Depends(require_user),
 ):
     if not verify_password(user.password_hash, current):
-        return _page(request, db, user, pw_error="La contraseña actual no es correcta.",
-                     status_code=400)
+        return _account_page(request, db, user, 400, pw_error="La contraseña actual no es correcta.")
     if new != confirm:
-        return _page(request, db, user, pw_error="Las contraseñas nuevas no coinciden.",
-                     status_code=400)
+        return _account_page(request, db, user, 400, pw_error="Las contraseñas nuevas no coinciden.")
     try:
         user.password_hash = hash_password(new)
     except ValueError as exc:
-        return _page(request, db, user, pw_error=str(exc), status_code=400)
+        return _account_page(request, db, user, 400, pw_error=str(exc))
     user.session_version += 1
     request.session["sv"] = user.session_version  # esta sesión sigue; las demás caducan
-    return _page(request, db, user, pw_ok="Contraseña actualizada.")
+    return _account_page(request, db, user, pw_ok="Contraseña actualizada.")
