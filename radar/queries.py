@@ -51,10 +51,13 @@ def text_condition(q: str):
     return and_(*[_like(t) for t in terms]) if terms else None
 
 
-def visible_articles(demo_mode: bool) -> Select:
+def visible_articles(demo_mode: bool, hidden: bool | None = False) -> Select:
+    """`hidden`: False excluye las ocultas a mano, True trae solo esas y None, todas."""
     stmt = select(Article)
     if not demo_mode:
         stmt = stmt.where(Article.is_demo.is_(False))
+    if hidden is not None:
+        stmt = stmt.where(Article.hidden_at.is_not(None) if hidden else Article.hidden_at.is_(None))
     return stmt
 
 

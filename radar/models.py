@@ -158,6 +158,8 @@ class Article(Base):
     enrich_error: Mapped[str | None] = mapped_column(Text)
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     clicks: Mapped[int] = mapped_column(Integer, default=0, server_default="0", index=True)
+    # Oculta a mano del listado y del resumen. No borra nada ni la saca del análisis léxico.
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     media: Mapped[Media] = relationship()
     subsource: Mapped[Subsource | None] = relationship()

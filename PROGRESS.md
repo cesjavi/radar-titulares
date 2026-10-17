@@ -336,6 +336,7 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 ### Agregado: perfiles de usuario (2026-10-17)
 - `users.role` (migración `0012`): `admin` y `analizador`. Los usuarios existentes con `is_admin` pasan a `admin`; el resto, a `analizador`.
 - El analizador ve el panel, analiza grupos con IA (`/grupos/{id}/analizar-ia`) y los oculta o vuelve a mostrar en el resumen (`/grupos/{id}/ocultar`). Revisiones, correcciones de grupos, IA de pares, fuentes y configuración siguen siendo del administrador. Tiene «Mi cuenta» (`/configuracion/cuenta`) para cambiar su contraseña.
+- Notas ocultas (`articles.hidden_at`, migración `0013`): el analizador o el administrador oculta una nota desde el listado o su detalle; deja de verse en `/noticias` y en las últimas del resumen (se ven con «Solo ocultas a mano»), queda registrado en el historial y sigue en sus grupos y en el análisis.
 - Configuración → Usuarios: alta, cambio de perfil, activar/desactivar y nueva contraseña (cierra sus sesiones). Nadie puede quitarse el perfil de administrador ni desactivarse. CLI: `create-user USUARIO --role`.
 - Decisión: `is_admin` se conserva como columna sincronizada con `role` (validador del modelo) para que el código anterior siga andando si la migración se aplica antes del despliegue, como en Vercel.
 

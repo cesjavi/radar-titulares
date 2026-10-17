@@ -15,6 +15,14 @@
         <span class="badge badge-author-none" title="Nota sin firma individual (publicada por la redacción general o agencia)">Sin firma</span>
       {% endif %}
       · cobertura: {{ a.coverage }}{% if a.section %} · {{ a.section }}{% endif %}
+      {% if user and user.can_analyze %}
+      <form method="post" action="/noticias/{{ a.id }}/ocultar" class="inline-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="ocultar" value="{{ 'false' if a.hidden_at else 'true' }}">
+        <input type="hidden" name="volver" value="{{ volver or '/noticias' }}">
+        <button type="submit" class="link small" title="{{ 'Volver a mostrarla en el listado y el resumen' if a.hidden_at else 'Sacarla del listado y del resumen (no se borra; sigue en los grupos y el análisis)' }}">{{ 'Mostrar' if a.hidden_at else 'Ocultar' }}</button>
+      </form>
+      {% endif %}
     </div>
   </td>
   <td data-label="Clicks" class="nowrap small num">

@@ -89,3 +89,40 @@ def test_analyst_cannot_manage_users(client, db):
         "role": "admin"})
     assert r.status_code == 403
     assert db.query(User).filter_by(username="otro").first() is None
+
+
+def test_analyst_hides_article_without_touching_analysis(client, db, media):
+    from radar.models import Article, ManualReview, StoryGroupMember
+
+    a, b, c, group, rel = _setup(db, media)
+    make_user("analista", role="analizador")
+    login(client, username="analista")
+    listing = client.get("/noticias").text
+    assert f"/noticias/{a.id}/ocultar" in listing
+    token = csrf_from(listing)
+
+    r = client.post(f"/noticias/{a.id}/ocultar", data={
+        "csrf_token": token, "ocultar": "true", "volver": "https://externo.example/"},
+        follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == f"/noticias/{a.id}"
+    db.expire_all()
+    assert db.get(Article, a.id).hidden_at is not None
+    assert db.query(ManualReview).filter_by(target_type="article", target_id=a.id).count() == 1
+    # Sigue en su grupo: ocultar es solo de presentación.
+    assert db.query(StoryGroupMember).filter_by(article_id=a.id, status="activo").count() == 1
+
+    assert f'href="/noticias/{a.id}"' not in client.get("/noticias").text
+    assert f'href="/noticias/{a.id}"' in client.get("/noticias?ocultas=true").text
+
+    client.post(f"/noticias/{a.id}/ocultar", data={"csrf_token": token, "ocultar": "false"})
+    db.expire_all()
+    assert db.get(Article, a.id).hidden_at is None
+
+
+def test_hiding_article_requires_profile_and_csrf(client, db, media):
+    a, b, c, group, rel = _setup(db, media)
+    make_user("analista", role="analizador")
+    assert client.post(f"/noticias/{a.id}/ocultar", data={"ocultar": "true"},
+                       follow_redirects=False).status_code in (303, 403)
+    login(client, username="analista")
+    assert client.post(f"/noticias/{a.id}/ocultar", data={"ocultar": "true"}).status_code == 403

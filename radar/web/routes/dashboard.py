@@ -224,7 +224,8 @@ def summary(
     top_alerts = sorted(db.scalars(scope(select(Alert)).order_by(Alert.created_at.desc())
                                    .limit(30)).all(),
                         key=lambda a: PRIORITY_ORDER.get(a.priority, 9))[:5]
-    total = db.scalar(select(func.count()).select_from(visible_articles(demo).subquery())) or 0
+    total = db.scalar(select(func.count()).select_from(
+        visible_articles(demo, hidden=None).subquery())) or 0
     last_ok = db.scalar(select(func.max(Subsource.last_success_at)))
 
     return render(request, "summary.html", {

@@ -118,6 +118,12 @@ def require_admin(user: User = Depends(require_user)) -> User:
     return user
 
 
+def safe_return(target: str, default: str) -> str:
+    """Solo se vuelve a una ruta propia del panel (nada de URLs externas)."""
+    ok = target.startswith("/") and not target.startswith(("//", "/\\"))
+    return target if ok else default
+
+
 def require_analyst(user: User = Depends(require_user)) -> User:
     """Analizador o administrador: analizar grupos con IA y ocultarlos del resumen."""
     if not user.can_analyze:

@@ -1,6 +1,7 @@
-{% set qs = '&media=' ~ (filters.media | urlencode) ~ '&topic=' ~ (filters.topic | urlencode) ~ '&q=' ~ (filters.q | urlencode) ~ '&seccion=' ~ (filters.seccion | urlencode) ~ '&periodo=' ~ (filters.periodo | urlencode) ~ '&autor=' ~ (filters.autor | urlencode) ~ ('&relacionadas=true' if filters.relacionadas else '') ~ ('&min_clicks=' ~ filters.min_clicks if filters.min_clicks else '') ~ ('&orden=' ~ filters.orden if filters.orden else '') %}
+{% set qs = '&media=' ~ (filters.media | urlencode) ~ '&topic=' ~ (filters.topic | urlencode) ~ '&q=' ~ (filters.q | urlencode) ~ '&seccion=' ~ (filters.seccion | urlencode) ~ '&periodo=' ~ (filters.periodo | urlencode) ~ '&autor=' ~ (filters.autor | urlencode) ~ ('&relacionadas=true' if filters.relacionadas else '') ~ ('&min_clicks=' ~ filters.min_clicks if filters.min_clicks else '') ~ ('&orden=' ~ filters.orden if filters.orden else '') ~ ('&ocultas=true' if filters.ocultas else '') %}
+{% set volver = request.url.path ~ ('?' ~ request.url.query if request.url.query else '') %}
 {% if media_warning %}<p class="alert alert-warn" role="status">{{ media_warning }}</p>{% endif %}
-<p class="muted small">{{ total }} resultado{{ 's' if total != 1 }} · página {{ page }} de {{ pages }}</p>
+<p class="muted small">{{ total }} resultado{{ 's' if total != 1 }}{% if filters.ocultas %} oculto{{ 's' if total != 1 }} a mano{% endif %} · página {{ page }} de {{ pages }}{% if hidden_total and not filters.ocultas %} · {{ hidden_total }} oculta{{ 's' if hidden_total != 1 }} a mano (<a href="/noticias?ocultas=true">ver</a>){% endif %}</p>
 {% if articles %}
 <table class="table responsive">
   <thead><tr><th>Medio</th><th>Titular</th><th>Clicks</th><th>Publicada</th><th>Detectada</th></tr></thead>

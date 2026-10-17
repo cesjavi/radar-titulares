@@ -52,6 +52,7 @@
     </select>
   </label>
   <label class="inline"><input type="checkbox" name="relacionadas" value="true" {{ 'checked' if filters.relacionadas }}> Solo con coincidencias</label>
+  {% if not public_view %}<label class="inline"><input type="checkbox" name="ocultas" value="true" {{ 'checked' if filters.ocultas }}> Solo ocultas a mano</label>{% endif %}
   <label class="grow">Buscar en titular, bajada y autor
     <input type="search" name="q" value="{{ filters.q }}" maxlength="200" placeholder="p. ej. inflación o apellido de autor">
   </label>

@@ -13,7 +13,15 @@ from sqlalchemy.orm import Session
 
 from radar.alerts.engine import set_status
 from radar.analysis.engine import refresh_group_stats
-from radar.models import Alert, ArticleRelation, ManualReview, StoryGroup, StoryGroupMember, User
+from radar.models import (
+    Alert,
+    Article,
+    ArticleRelation,
+    ManualReview,
+    StoryGroup,
+    StoryGroupMember,
+    User,
+)
 from radar.timeutil import utcnow
 
 REVIEW_DECISIONS = {"confirmada", "rechazada", "pendiente"}
@@ -107,6 +115,15 @@ def merge_groups(db: Session, target: StoryGroup, other: StoryGroup, user: User,
     db.flush()
     refresh_group_stats(db, target)
     _log(db, user, "group", target.id, "unir", note, {"absorbido": other.id})
+
+
+def set_article_hidden(db: Session, article: Article, hidden: bool, user: User) -> None:
+    """Oculta o vuelve a mostrar una nota en el listado y el resumen. Sigue en la base, en sus
+    grupos y en el análisis léxico: ocultar es una decisión de presentación, no de contenido."""
+    if bool(article.hidden_at) == hidden:
+        return
+    article.hidden_at = utcnow() if hidden else None
+    _log(db, user, "article", article.id, "oculta" if hidden else "visible", None)
 
 
 def set_group_hidden(db: Session, group: StoryGroup, hidden: bool, user: User) -> None:

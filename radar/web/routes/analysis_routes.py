@@ -50,6 +50,7 @@ from radar.web.deps import (
     render,
     require_admin,
     require_analyst,
+    safe_return,
     verify_csrf,
     viewer,
 )
@@ -337,10 +338,7 @@ def group_hide(group_id: int, request: Request, ocultar: bool = Form(True),
                db: Session = Depends(get_db), user: User = Depends(require_analyst)):
     group = _load_group(db, group_id)
     set_group_hidden(db, group, ocultar, user)
-    # Solo se vuelve a una ruta propia del panel (nada de URLs externas).
-    safe = volver.startswith("/") and not volver.startswith(("//", "/\\"))
-    target = volver if safe else f"/grupos/{group_id}"
-    return RedirectResponse(target, status_code=303)
+    return RedirectResponse(safe_return(volver, f"/grupos/{group_id}"), status_code=303)
 
 
 @router.post("/grupos/{group_id}/quitar", dependencies=[Depends(verify_csrf)])

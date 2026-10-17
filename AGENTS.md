@@ -37,7 +37,7 @@ app.py + vercel.json   punto de entrada y configuración para Vercel (VERCEL.md)
   social/      telegram.py (parser de t.me/s), collector.py, match.py (posteo ↔ nota)
   notify/      telegram.py          maintenance.py (backup/retención)       metrics.py
   web/         app.py, deps.py, routes/ (api_routes.py: API de la extensión de Chrome)      templates/      static/
-alembic/versions/   0001 … 0012        deploy/   systemd, nginx, scripts
+alembic/versions/   0001 … 0013        deploy/   systemd, nginx, scripts
 tests/              fixtures/ (sintéticos)
 ```
 
@@ -65,7 +65,7 @@ Ver `skills.md` para la lista completa y qué hace cada una.
 - **Cambios de modelo → migración Alembic** nueva (`000N_nombre.py`, con `alembic revision --autogenerate` y renombrando el archivo). Compatible hacia atrás: agregar con valores por defecto.
 - **Cambios en las reglas del motor léxico → subir `ALGORITHM_VERSION`** (`radar/analysis/__init__.py`): se guarda en cada relación y grupo.
 - **Cambios en el prompt de IA → subir `PROMPT_VERSION`** (`radar/ai/__init__.py`); invalida la caché.
-- **Perfiles** (`User.role`, `radar.models.ROLES`): `admin` (todo) y `analizador`, que solo puede analizar grupos con IA y ocultarlos del resumen (`require_analyst`; en plantillas, `user.can_analyze`). `is_admin` sigue como columna, derivada de `role`: asignar siempre `role`, nunca `is_admin`. Los usuarios se gestionan en Configuración → Usuarios o con `create-user`; nadie puede quitarse a sí mismo el perfil de administrador.
+- **Perfiles** (`User.role`, `radar.models.ROLES`): `admin` (todo) y `analizador`, que solo puede analizar grupos con IA y ocultar grupos o notas sueltas (`hidden_at`: solo presentación; siguen en los grupos y en el análisis léxico; `visible_articles` las excluye salvo `hidden=True/None`) (`require_analyst`; en plantillas, `user.can_analyze`). `is_admin` sigue como columna, derivada de `role`: asignar siempre `role`, nunca `is_admin`. Los usuarios se gestionan en Configuración → Usuarios o con `create-user`; nadie puede quitarse a sí mismo el perfil de administrador.
 - **Todo POST exige CSRF** (`verify_csrf`) y las acciones, rol administrador (salvo las del analizador, arriba). Única excepción: `/api/x/*`, que se autentica con token y no con la cookie (ver «Redes sociales»). Las rutas de lectura usan `viewer` (permite la vista pública si está activa) o `require_user`. El contenido externo se escapa siempre (Jinja2 autoescape; nunca `|safe` con datos de medios).
 - **Red:** toda descarga pasa por `radar/net.py` (SSRF, dominios permitidos, redirecciones validadas, robots.txt, límites). No usar `httpx` directo para contenido de medios.
 - **Transacciones breves**; la recolección escribe en lotes y desde un solo hilo.

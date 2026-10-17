@@ -4,10 +4,12 @@ import json
 import math
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
+from radar.analysis.manual import set_article_hidden
 from radar.analysis.relations import TYPE_LABELS
 from radar.config import get_settings
 from radar.models import (
@@ -24,7 +26,15 @@ from radar.models import (
 from radar.queries import matching_topics, text_condition, topic_condition, visible_articles
 from radar.sources_status import STATE_LABELS, media_health
 from radar.timeutil import utcnow
-from radar.web.deps import demo_visible, get_db, render, viewer
+from radar.web.deps import (
+    demo_visible,
+    get_db,
+    render,
+    require_analyst,
+    safe_return,
+    verify_csrf,
+    viewer,
+)
 
 router = APIRouter()
 
@@ -44,11 +54,13 @@ def article_list(
     relacionadas: bool = Query(False),
     min_clicks: int = Query(0, ge=0),
     orden: str = Query("recientes", max_length=16),
+    ocultas: bool = Query(False),
     db: Session = Depends(get_db),
     user: User = Depends(viewer),
 ):
     demo = demo_visible(request)
-    stmt = visible_articles(demo)
+    # Las ocultas a mano solo se ven pidiéndolas (para volver a mostrarlas).
+    stmt = visible_articles(demo, hidden=ocultas)
     if seccion:
         stmt = stmt.where(Article.section == seccion)
     if autor == "con_autor":
@@ -109,7 +121,9 @@ def article_list(
         "articles": rows, "total": total, "page": page, "pages": pages,
         "filters": {"media": media, "topic": topic, "q": q, "seccion": seccion,
                     "periodo": periodo, "autor": autor, "relacionadas": relacionadas,
-                    "min_clicks": min_clicks, "orden": orden},
+                    "min_clicks": min_clicks, "orden": orden, "ocultas": ocultas},
+        "hidden_total": db.scalar(select(func.count()).select_from(
+            visible_articles(demo, hidden=True).subquery())) or 0,
         "section_options": [s for s in db.scalars(
             select(Article.section).where(Article.section.is_not(None))
             .group_by(Article.section).order_by(func.count().desc()).limit(40))],
@@ -128,6 +142,17 @@ def register_article_click(article_id: int, db: Session = Depends(get_db)):
     )
     db.commit()
     return {"ok": True}
+
+
+@router.post("/noticias/{article_id}/ocultar", dependencies=[Depends(verify_csrf)])
+def article_hide(article_id: int, ocultar: bool = Form(True),
+                 volver: str = Form("", max_length=500),
+                 db: Session = Depends(get_db), user: User = Depends(require_analyst)):
+    article = db.get(Article, article_id)
+    if article is None:
+        raise HTTPException(status_code=404, detail="La noticia no existe.")
+    set_article_hidden(db, article, ocultar, user)
+    return RedirectResponse(safe_return(volver, f"/noticias/{article_id}"), status_code=303)
 
 
 @router.get("/noticias/{article_id}")
