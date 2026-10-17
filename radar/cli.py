@@ -132,7 +132,7 @@ def _analyze():
     """Análisis → alertas → cola de notificaciones (transacciones separadas)."""
     from radar.ai.service import run_ai
     from radar.alerts.engine import update_alerts
-    from radar.analysis import relevance
+    from radar.analysis import relevance, trends
     from radar.analysis.engine import run_analysis
     from radar.db import session_scope
     from radar.notify import telegram
@@ -150,6 +150,8 @@ def _analyze():
         summary.notifications = telegram.process_queue(db)
     with session_scope() as db:
         summary.relevance = relevance.train_and_store(db)  # orden «por interés» del resumen
+    with session_scope() as db:
+        summary.trends = trends.compute_and_store(db)  # temas en alza (tarjeta del resumen)
     return summary
 
 
@@ -186,6 +188,11 @@ def cmd_analyze(_args) -> int:
           f"{s.relations_removed} retiradas. Por tipo: {s.by_type}")
     print(f"Grupos: {s.groups_new} nuevos, {s.groups_updated} actualizados, "
           f"{s.groups_dissolved} disueltos. ({s.duration_ms} ms)")
+    trend = getattr(s, "trends", None) or {}
+    rising = trend.get("rising", [])
+    print("Temas en alza: " + (", ".join(f"{r['name']} ({r['count']} notas en "
+                                         f"{trend['window_hours']} h; lo habitual, {r['usual']:g})"
+                                         for r in rising) or "ninguno") + ".")
     a = s.alerts
     print(f"Alertas: {a.created} nuevas, {a.updated} con cambios relevantes, {a.unchanged} sin "
           f"cambios, {a.skipped} grupos sin alerta, {a.queued} avisos en cola.")

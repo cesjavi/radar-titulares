@@ -263,6 +263,17 @@
     </section>
     <section class="card">
       <h2>Temas de seguimiento</h2>
+      {% if trends and trends.rising %}
+      <div class="rising-topics">
+        <h3 class="small">📈 En alza</h3>
+        <ul class="compact-list">
+          {% for r in trends.rising %}
+          <li><a href="/noticias?topic={{ r.slug }}&periodo=24h">{{ r.name }}</a>: {{ r.count }} notas en las últimas {{ trends.window_hours }} h; lo habitual es {{ '%g' | format(r.usual) }}.{% if r.media_names %} <span class="small muted">{{ r.media | default(0) }} medio{{ 's' if r.media != 1 }} independiente{{ 's' if r.media != 1 }}: {{ r.media_names | join(', ') }}</span>{% endif %}</li>
+          {% endfor %}
+        </ul>
+        <p class="small muted">Más notas que su ritmo de los últimos {{ trends.baseline_days }} días (calculado {{ trends.computed_at | local_dt }}). Es volumen, no explica por qué.</p>
+      </div>
+      {% endif %}
       <table class="table compact">
         <tbody>
         {% for t, n in per_topic %}

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from radar.analysis import relevance
+from radar.analysis import relevance, trends
 from radar.config import get_settings
 from radar.models import (
     AiGroupAnalysis,
@@ -257,6 +257,7 @@ def summary(
         "group_order": orden,
         "group_orders": DASHBOARD_GROUP_ORDERS,
         "interest_note": interest_note,
+        "trends": trends.load(db),
         "min_medios": min_medios,
         "limite": limite,
         "hidden_count": hidden_count,

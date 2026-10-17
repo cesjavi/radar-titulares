@@ -352,6 +352,11 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - Clics: hasta ahora solo contaba abrir la ficha de la nota en el panel (en Neon había 0 clics). Ahora `panel.js` también registra los clics en «original ↗» (grupos, relaciones, alertas y ficha; no en la evaluación) y `POST /noticias/{id}/click` exige CSRF, como el resto de los POST.
 - Verificado con datos reales: la base local no tiene señales; Neon tenía 0 clics y 31 notas de desinterés, así que el orden se activa cuando haya clics.
 
+### Agregado: temas en alza (2026-10-17)
+- `radar/analysis/trends.py`: notas de cada tema en las últimas 3 h contra las ventanas de 3 h de los 14 días previos; en alza si supera la mediana + 3 MAD (piso de una nota) y llega a 4. Se calcula al final de `analyze` y se guarda en `app_settings.rising_topics`; el resumen lo muestra dentro de «Temas de seguimiento». La CLI y `pipeline` lo informan.
+- Decisiones tomadas al probar con los datos reales de Neon (los sintéticos no lo mostraban): solo cuentan notas con hora de publicación (con la de detección, lo atrasado tras un hueco se amontonaba en una ventana); la cobertura se mide por hora de publicación y no de detección (en Vercel la recolección corre pocas veces por día); y la base excluye las ventanas con menos de la mitad del volumen total habitual de su franja horaria (hubo un hueco de recolección del 9 al 13 de octubre: esas ventanas incompletas bajaban «lo habitual» y daban falsas alzas). Si la ventana actual está incompleta o hay menos de 2 días de base, no se marca nada.
+- Verificado con Neon (solo lectura): ningún tema en alza ahora; en el pasado reciente, picos aislados de pocos temas. Tarda ~4 s por cálculo contra Neon.
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.

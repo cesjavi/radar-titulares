@@ -75,6 +75,7 @@ def analysis_phase() -> dict:
         "alertas_nuevas": getattr(alerts, "created", 0),
         "alertas_actualizadas": getattr(alerts, "updated", 0),
         "posteos_vinculados": getattr(getattr(s, "social", None), "links_new", 0),
+        "temas_en_alza": [r["slug"] for r in (getattr(s, "trends", None) or {}).get("rising", [])],
     }
 
 
