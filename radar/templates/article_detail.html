@@ -29,7 +29,7 @@
     {% endif %}
   </p>
   {% if not a.is_demo and (a.url.startswith('https://') or a.url.startswith('http://')) %}
-  <p><a href="{{ a.url }}" target="_blank" rel="noopener noreferrer nofollow">Abrir nota original ↗</a></p>
+  <p><a href="{{ a.url }}" data-click-id="{{ a.id }}" target="_blank" rel="noopener noreferrer nofollow">Abrir nota original ↗</a></p>
   {% endif %}
 
   <dl class="meta">

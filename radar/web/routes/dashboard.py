@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from radar.analysis import relevance
 from radar.config import get_settings
 from radar.models import (
     AiGroupAnalysis,
@@ -24,7 +25,7 @@ from radar.models import (
 from radar.web.routes.alerts_routes import PRIORITY_ORDER, _alert_scope
 from radar.queries import topic_condition, visible_articles
 from radar.seed import get_setting
-from radar.text import normalize_for_search
+from radar.text import excluded_terms_pattern, normalize_for_search
 from radar.sources_status import STATE_LABELS, media_health
 from radar.timeutil import utcnow
 from radar.web.deps import demo_visible, get_db, is_public, render, viewer
@@ -37,16 +38,9 @@ DASHBOARD_GROUP_ORDERS = {
     "notas": "Más notas",
     "actualizados": "Última actualización",
     "antiguos": "Fecha (más antigua)",
+    "interes": "Por interés (clics y ocultos)",
 }
-
-
-def excluded_terms_pattern(raw: str) -> re.Pattern | None:
-    """Términos excluidos del resumen (uno por línea), sin mayúsculas ni tildes y por palabra
-    completa: «papa» excluye «el papa León» pero no «papas fritas»."""
-    terms = [normalize_for_search(t) for t in raw.splitlines() if t.strip()]
-    if not terms:
-        return None
-    return re.compile(r"\b(?:" + "|".join(re.escape(t) for t in terms) + r")\b")
+INTEREST_CANDIDATES = 300  # grupos que se puntúan para el orden por interés
 
 
 def _excluded(group: StoryGroup, pattern: re.Pattern) -> bool:
@@ -96,6 +90,21 @@ def summary(
 
     if orden not in DASHBOARD_GROUP_ORDERS:
         orden = "medios"
+    interest_model, interest_note = None, None
+    if orden == "interes":
+        interest_model = relevance.load_model(db)
+        if relevance.usable(interest_model):
+            interest_note = (f"Ordenado por parecido con lo que se abrió ({interest_model['positives']} "
+                             f"notas) y con lo que se ocultó o excluyó ({interest_model['negatives']}). "
+                             "Solo cambia el orden: no se oculta nada.")
+        else:
+            got = interest_model or {}
+            interest_note = (f"Todavía no hay datos para ordenar por interés: hacen falta al menos "
+                             f"{relevance.MIN_EXAMPLES} notas abiertas y {relevance.MIN_EXAMPLES} "
+                             f"ocultas o excluidas (hay {got.get('positives', 0)} y "
+                             f"{got.get('negatives', 0)}; se actualiza en cada análisis). "
+                             "Se muestra el orden por medios.")
+            interest_model = None
 
     order_by = {
         "recientes": [StoryGroup.first_seen_at.desc().nulls_last(), StoryGroup.id.desc()],
@@ -103,7 +112,8 @@ def summary(
         "notas": [StoryGroup.article_count.desc(), StoryGroup.first_seen_at.desc(), StoryGroup.id.desc()],
         "actualizados": [StoryGroup.updated_at.desc().nulls_last(), StoryGroup.id.desc()],
         "antiguos": [StoryGroup.first_seen_at.asc().nulls_last(), StoryGroup.id.desc()],
-    }[orden]
+    }.get(orden, [StoryGroup.independent_media_count.desc(), StoryGroup.first_seen_at.desc(),
+                  StoryGroup.id.desc()])
 
     if limite not in (6, 12, 18, 24):
         limite = 6
@@ -112,6 +122,20 @@ def summary(
     # leen tandas hasta completar el límite.
     pattern = excluded_terms_pattern(get_setting(db, "summary_excluded_terms"))
     featured_raw, excluded_count, offset, batch = [], 0, 0, limite if pattern is None else 60
+    if interest_model is not None:
+        # Se puntúan los grupos más recientes y se reordenan en Python; el empate lo decide la
+        # cantidad de medios independientes.
+        candidates = db.scalars(group_stmt.order_by(StoryGroup.first_seen_at.desc().nulls_last(),
+                                                    StoryGroup.id.desc())
+                                .limit(INTEREST_CANDIDATES)).all()
+        candidates.sort(key=lambda g: (-relevance.group_score(interest_model, g),
+                                       -(g.independent_media_count or 0), -g.id))
+        for g in candidates:
+            if pattern is not None and _excluded(g, pattern):
+                excluded_count += 1
+            elif len(featured_raw) < limite:
+                featured_raw.append(g)
+        offset = 2000  # no entrar al bucle por tandas
     while len(featured_raw) < limite and offset < 2000:
         chunk = db.scalars(group_stmt.order_by(*order_by).offset(offset).limit(batch)).all()
         for g in chunk:
@@ -232,6 +256,7 @@ def summary(
         "featured_groups": featured_groups,
         "group_order": orden,
         "group_orders": DASHBOARD_GROUP_ORDERS,
+        "interest_note": interest_note,
         "min_medios": min_medios,
         "limite": limite,
         "hidden_count": hidden_count,

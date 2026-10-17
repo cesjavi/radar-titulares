@@ -43,7 +43,7 @@
     <li>
       <div class="small muted">{{ fmt_pub(a) }} · {{ a.media.name }}{% if a.author %} ({{ a.author }}){% endif %}{% if a.origin_label %} · {{ a.origin_label }}{% endif %}{% if a.is_syndicated %} · <span class="badge badge-syndicated">republicada</span>{% endif %}</div>
       <a class="headline" href="/noticias/{{ a.id }}">{{ a.title }}</a>
-      {% if not a.is_demo and (a.url.startswith('https://') or a.url.startswith('http://')) %} <a class="small" href="{{ a.url }}" target="_blank" rel="noopener noreferrer nofollow">original ↗</a>{% endif %}
+      {% if not a.is_demo and (a.url.startswith('https://') or a.url.startswith('http://')) %} <a class="small" href="{{ a.url }}" data-click-id="{{ a.id }}" target="_blank" rel="noopener noreferrer nofollow">original ↗</a>{% endif %}
     </li>
     {% endfor %}
   </ol>

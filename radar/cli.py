@@ -132,6 +132,7 @@ def _analyze():
     """Análisis → alertas → cola de notificaciones (transacciones separadas)."""
     from radar.ai.service import run_ai
     from radar.alerts.engine import update_alerts
+    from radar.analysis import relevance
     from radar.analysis.engine import run_analysis
     from radar.db import session_scope
     from radar.notify import telegram
@@ -147,6 +148,8 @@ def _analyze():
         summary.alerts = update_alerts(db)
     with session_scope() as db:
         summary.notifications = telegram.process_queue(db)
+    with session_scope() as db:
+        summary.relevance = relevance.train_and_store(db)  # orden «por interés» del resumen
     return summary
 
 

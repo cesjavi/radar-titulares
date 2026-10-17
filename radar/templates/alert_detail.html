@@ -28,7 +28,7 @@
       <tr>
         <td data-label="Medio">{{ x.medio }}{% if x.autor %}<div class="small">Por {{ x.autor }}</div>{% endif %}{% if x.subfuente %}<div class="small muted">{{ x.subfuente }}</div>{% endif %}{% if x.republicada %} <span class="badge badge-syndicated">republicada</span>{% endif %}</td>
         <td data-label="Titular"><a href="/noticias/{{ x.id }}">{{ x.titular }}</a>
-          {% set art = arts.get(x.id) %}{% if art and not art.is_demo and (art.url.startswith('https://') or art.url.startswith('http://')) %} <a class="small" href="{{ art.url }}" target="_blank" rel="noopener noreferrer nofollow">original ↗</a>{% endif %}</td>
+          {% set art = arts.get(x.id) %}{% if art and not art.is_demo and (art.url.startswith('https://') or art.url.startswith('http://')) %} <a class="small" href="{{ art.url }}" data-click-id="{{ art.id }}" target="_blank" rel="noopener noreferrer nofollow">original ↗</a>{% endif %}</td>
         <td data-label="Publicada" class="small">{{ x.publicada.valor or 'sin dato' }}<div class="muted">{{ x.publicada.precision }}</div></td>
         <td data-label="Detectada" class="small nowrap">{{ x.detectada }}</td>
       </tr>

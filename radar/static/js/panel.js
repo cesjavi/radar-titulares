@@ -16,6 +16,20 @@
     if (msg && !window.confirm(msg)) ev.preventDefault();
   }, true);
 
+  // <a data-click-id="N">: registra que se abrió la nota original (señal de interés para el
+  // orden del resumen). No demora la navegación: el pedido sigue aunque se cierre la página.
+  document.addEventListener("click", function (ev) {
+    var link = ev.target.closest && ev.target.closest("a[data-click-id]");
+    if (!link) return;
+    var token = "";
+    try { token = JSON.parse(document.body.getAttribute("hx-headers") || "{}")["X-CSRF-Token"] || ""; }
+    catch (e) { return; }
+    fetch("/noticias/" + encodeURIComponent(link.getAttribute("data-click-id")) + "/click", {
+      method: "POST", keepalive: true, credentials: "same-origin",
+      headers: {"X-CSRF-Token": token}
+    }).catch(function () {});
+  });
+
   document.addEventListener("DOMContentLoaded", function () {
     var form = document.getElementById("form-recolectar");
     if (form) setupCollect(form);

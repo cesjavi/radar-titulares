@@ -346,6 +346,12 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - `radar/analysis/evaluation.py` y `python -m radar evaluate`: precisión por tipo y tramo con intervalo de Wilson al 95 %. Una relación cuenta una vez (mayoría entre personas; empate o «no sé» no cuentan) y las revisiones del administrador valen como etiqueta.
 - Límite: mide precisión, no exhaustividad (los pares que el motor no relacionó no se muestrean).
 
+### Agregado: orden «Por interés» en el resumen (2026-10-17)
+- `radar/analysis/relevance.py`: Naive Bayes binarizado en Python puro sobre titular y bajada. Interés: notas con clics. Desinterés: notas ocultas, notas de grupos ocultos y notas con términos excluidos (si una nota tiene las dos señales, manda el desinterés). Se entrena al final de `analyze` (también en el cron de Vercel) y se guarda en `app_settings.relevance_model`; sin migración.
+- Resumen: «Por interés (clics y ocultos)» puntúa los 300 grupos más recientes y los reordena; solo cambia el orden, no oculta nada. Hace falta un mínimo de 10 ejemplos por clase; si no, avisa y usa el orden por medios.
+- Clics: hasta ahora solo contaba abrir la ficha de la nota en el panel (en Neon había 0 clics). Ahora `panel.js` también registra los clics en «original ↗» (grupos, relaciones, alertas y ficha; no en la evaluación) y `POST /noticias/{id}/click` exige CSRF, como el resto de los POST.
+- Verificado con datos reales: la base local no tiene señales; Neon tenía 0 clics y 31 notas de desinterés, así que el orden se activa cuando haya clics.
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.

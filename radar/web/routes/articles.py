@@ -135,12 +135,13 @@ def article_list(
     return render(request, template, ctx, user=user)
 
 
-@router.post("/noticias/{article_id}/click")
-def register_article_click(article_id: int, db: Session = Depends(get_db)):
+@router.post("/noticias/{article_id}/click", dependencies=[Depends(verify_csrf)])
+def register_article_click(article_id: int, db: Session = Depends(get_db),
+                           user: User = Depends(viewer)):
+    """Se abrió la nota original desde el panel (lo envía panel.js)."""
     db.execute(
         update(Article).where(Article.id == article_id).values(clicks=Article.clicks + 1)
     )
-    db.commit()
     return {"ok": True}
 
 

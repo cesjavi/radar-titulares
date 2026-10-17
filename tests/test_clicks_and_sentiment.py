@@ -5,7 +5,7 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from radar.models import Article, Media
-from tests.conftest import login, make_user
+from tests.conftest import csrf_from, login, make_user
 
 
 def test_article_clicks_and_filters(client, db, admin):
@@ -43,8 +43,10 @@ def test_article_clicks_and_filters(client, db, admin):
     pos_art1 = r_sort.text.find("Nota poco leída")
     assert pos_art3 < pos_art2 < pos_art1
 
-    # Incrementar clicks mediante endpoint POST
-    res_click = client.post(f"/noticias/{art1.id}/click")
+    # Incrementar clicks mediante endpoint POST (lo llama panel.js con el token CSRF)
+    assert client.post(f"/noticias/{art1.id}/click").status_code == 403
+    token = csrf_from(client.get("/noticias").text)
+    res_click = client.post(f"/noticias/{art1.id}/click", headers={"X-CSRF-Token": token})
     assert res_click.status_code == 200
     db.expire_all()
     art1_db = db.get(Article, art1.id)

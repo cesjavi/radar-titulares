@@ -33,7 +33,7 @@
       <dt>Detectada</dt><dd>{{ a.first_seen_at | local_dt }}</dd>
       <dt>Cobertura</dt><dd>{{ a.coverage }}</dd>
     </dl>
-    <p><a href="/noticias/{{ a.id }}">Ficha</a>{% if not a.is_demo and (a.url.startswith('https://') or a.url.startswith('http://')) %} · <a href="{{ a.url }}" target="_blank" rel="noopener noreferrer nofollow">Nota original ↗</a>{% endif %}</p>
+    <p><a href="/noticias/{{ a.id }}">Ficha</a>{% if not a.is_demo and (a.url.startswith('https://') or a.url.startswith('http://')) %} · <a href="{{ a.url }}" data-click-id="{{ a.id }}" target="_blank" rel="noopener noreferrer nofollow">Nota original ↗</a>{% endif %}</p>
   </article>
   {% endfor %}
 </div>

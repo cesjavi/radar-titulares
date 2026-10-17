@@ -50,6 +50,15 @@ def clean_ws(value: str | None) -> str:
     return _WS.sub(" ", value or "").strip()
 
 
+def excluded_terms_pattern(raw: str) -> re.Pattern | None:
+    """Términos excluidos del resumen (uno por línea), sin mayúsculas ni tildes y por palabra
+    completa: «papa» excluye «el papa León» pero no «papas fritas»."""
+    terms = [normalize_for_search(t) for t in raw.splitlines() if t.strip()]
+    if not terms:
+        return None
+    return re.compile(r"\b(?:" + "|".join(re.escape(t) for t in terms) + r")\b")
+
+
 def normalize_for_search(value: str) -> str:
     decomposed = unicodedata.normalize("NFKD", value.lower())
     return clean_ws("".join(c for c in decomposed if not unicodedata.combining(c)))
