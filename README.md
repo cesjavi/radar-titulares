@@ -98,6 +98,7 @@ Los datos demo usan dominios `.invalid`, se marcan con la insignia DEMO y un avi
 | `python -m radar create-admin USUARIO [--password-stdin]` | Crea un administrador. |
 | `python -m radar create-user USUARIO [--role analizador\|admin] [--password-stdin]` | Crea un usuario con perfil (por defecto, analizador). También se hace desde Configuración → Usuarios. |
 | `python -m radar set-password USUARIO [--password-stdin]` | Cambia la contraseña y cierra las sesiones abiertas. |
+| `python -m radar evaluate [--version V\|todas] [--json]` | Precisión del motor léxico por tipo y tramo de puntaje, según las etiquetas de «Evaluación del motor» y las revisiones del administrador. |
 | `python -m radar collect` | Recolecta una vez todas las subfuentes cuyo intervalo mínimo ya venció. |
 | `python -m radar collect --media perfil\|eldestape\|infobae\|pagina12` | Recolecta un solo medio. |
 | `python -m radar collect --force` | Ignora el intervalo mínimo. |

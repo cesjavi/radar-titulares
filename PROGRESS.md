@@ -340,6 +340,12 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - Configuración → Usuarios: alta, cambio de perfil, activar/desactivar y nueva contraseña (cierra sus sesiones). Nadie puede quitarse el perfil de administrador ni desactivarse. CLI: `create-user USUARIO --role`.
 - Decisión: `is_admin` se conserva como columna sincronizada con `role` (validador del modelo) para que el código anterior siga andando si la migración se aplica antes del despliegue, como en Vercel.
 
+### Agregado: evaluación de la precisión del motor (2026-10-17)
+- «Evaluación del motor» (`/evaluacion`, analizador o administrador): de a una relación, de una muestra estratificada por tipo y tramo de puntaje (hasta 50 por tipo, el estrato con menos etiquetas primero), sin mostrar el puntaje. Respuestas: correcta, incorrecta o no sé, con una pregunta propia de cada tipo.
+- `relation_labels` (migración `0014`): aparte de `review_status` (no dispara alertas ni IA). Copia tipo, puntaje y versión; `relation_id` no es clave foránea, así la medición sobrevive a la retención.
+- `radar/analysis/evaluation.py` y `python -m radar evaluate`: precisión por tipo y tramo con intervalo de Wilson al 95 %. Una relación cuenta una vez (mayoría entre personas; empate o «no sé» no cuentan) y las revisiones del administrador valen como etiqueta.
+- Límite: mide precisión, no exhaustividad (los pares que el motor no relacionó no se muestrean).
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.
