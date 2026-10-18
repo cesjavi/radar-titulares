@@ -198,6 +198,11 @@ def test_cron_requires_secret_and_correct_bearer(vercel_app, monkeypatch):
 
 
 def test_cron_runs_requested_phases_and_validates_input(vercel_app, monkeypatch):
+    from radar.db import session_scope
+    from radar.models import Media
+
+    with session_scope() as db:  # el medio se valida contra la base
+        db.add(Media(slug="pagina12", name="Página/12", base_url="https://www.pagina12.com.ar"))
     calls = []
     import radar.pipeline as pipeline
 
@@ -211,6 +216,21 @@ def test_cron_runs_requested_phases_and_validates_input(vercel_app, monkeypatch)
     assert calls == [("c", "pagina12"), ("a",), ("c", None), ("a",)]
     assert client.get("/api/cron?tarea=borrar", headers=_auth()).status_code == 400
     assert client.get("/api/cron?tarea=recolectar&media=clarin", headers=_auth()).status_code == 400
+
+
+def test_cron_accepts_media_added_from_the_panel(vercel_app, monkeypatch):
+    from radar.db import session_scope
+    from radar.models import Media
+
+    with session_scope() as db:  # sin adaptador propio: lo recolecta el adaptador genérico
+        db.add(Media(slug="medio-nuevo", name="Medio Nuevo", base_url="https://nuevo.example"))
+    calls = []
+    import radar.pipeline as pipeline
+
+    monkeypatch.setattr(pipeline, "collect_phase", lambda media, force: calls.append(media) or {"estado": "ok"})
+    client = TestClient(vercel_app.app)
+    r = client.get("/api/cron?tarea=recolectar&media=medio-nuevo&franja=10", headers=_auth())
+    assert r.status_code == 200 and calls == ["medio-nuevo"]  # `franja` (solo para Vercel) se ignora
 
 
 def test_cron_duplicate_run_is_skipped_not_repeated(vercel_app):
@@ -312,3 +332,23 @@ def test_cron_maintenance_task_applies_retention(vercel_app, db, monkeypatch):
     assert r.status_code == 200 and r.json()["mantenimiento"]["notas_borradas"] == 1
     db.expire_all()
     assert [a.title for a in db.scalars(select(Article))] == ["nueva"]
+
+
+def test_vercel_crons_fit_the_hobby_plan():
+    """En Hobby cada cron corre a lo sumo una vez por día (si no, el despliegue falla) y se
+    dispara en cualquier momento de su hora: una tarea por hora para no pisarse."""
+    import json
+    import re
+    from pathlib import Path
+
+    crons = json.loads((Path(__file__).parent.parent / "vercel.json").read_text(encoding="utf-8"))["crons"]
+    assert len(crons) <= 100
+    hours = []
+    for c in crons:
+        m = re.fullmatch(r"(\d{1,2}) (\d{1,2}) \* \* \*", c["schedule"])
+        assert m, f"no es diario: {c['schedule']}"
+        hours.append(int(m.group(2)))
+    assert len(set(hours)) == len(hours)  # una tarea por hora
+    assert len({c["path"] for c in crons}) == len(crons)
+    infobae = sorted(h for c, h in zip(crons, hours) if "media=infobae" in c["path"])
+    assert max(b - a for a, b in zip(infobae, infobae[1:] + [infobae[0] + 24])) <= 3

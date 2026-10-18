@@ -367,6 +367,11 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - Con datos reales de Neon: 922 de 930 «cambios de bajada» de Infobae eran la misma nota primero por el sitemap (sin bajada) y después por el RSS (con bajada). Una bajada que aparece, desaparece o llega recortada ya no cuenta. Quedan Infobae 86 notas con cambios (2,4 %), Perfil 55, El Destape 25 y Página/12 16. ~3,7 s contra Neon en la primera página del historial.
 - Pendiente: el listado de «Titulares modificados» sigue mostrando las notas con más de una versión de feed, incluidas las que solo sumaron la bajada de otra subfuente (comportamiento previo).
 
+### Cambio: recolección según el ritmo de cada medio (2026-10-18)
+- `vercel.json`: 24 crons diarios (uno por hora UTC) en vez de 7. Infobae cada 3 h (su feed de 100 notas cubre ~6 h), Perfil cada 6, El Destape y Página/12 cada 12, La Política Online una vez, análisis cada 6, redes cada 12 y mantenimiento una vez.
+- `/api/cron?media=` valida contra los medios de la base, no contra los adaptadores del código: antes rechazaba La Política Online (dada de alta en el panel), que por eso nunca se recolectaba sola.
+- Estimación (no medida): ~30 CU-horas por mes en Neon de 100; el espacio puede crecer más rápido por las notas de Infobae que antes se perdían.
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.

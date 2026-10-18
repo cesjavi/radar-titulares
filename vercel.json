@@ -7,12 +7,29 @@
     }
   },
   "crons": [
-    { "path": "/api/cron?tarea=recolectar&media=perfil",    "schedule": "0 10 * * *" },
-    { "path": "/api/cron?tarea=recolectar&media=infobae",   "schedule": "0 11 * * *" },
-    { "path": "/api/cron?tarea=recolectar&media=pagina12",  "schedule": "0 12 * * *" },
-    { "path": "/api/cron?tarea=recolectar&media=eldestape", "schedule": "0 13 * * *" },
-    { "path": "/api/cron?tarea=redes",                      "schedule": "0 14 * * *" },
-    { "path": "/api/cron?tarea=analizar",                   "schedule": "0 15 * * *" },
-    { "path": "/api/cron?tarea=mantenimiento",              "schedule": "0 16 * * *" }
+    { "path": "/api/cron?tarea=recolectar&media=infobae&franja=00",            "schedule": "0 0 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=perfil&franja=01",             "schedule": "0 1 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=eldestape&franja=02",          "schedule": "0 2 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=infobae&franja=03",            "schedule": "0 3 * * *" },
+    { "path": "/api/cron?tarea=redes&franja=04",                               "schedule": "0 4 * * *" },
+    { "path": "/api/cron?tarea=analizar&franja=05",                            "schedule": "0 5 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=infobae&franja=06",            "schedule": "0 6 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=perfil&franja=07",             "schedule": "0 7 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=pagina12&franja=08",           "schedule": "0 8 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=infobae&franja=09",            "schedule": "0 9 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=la-politica-online&franja=10", "schedule": "0 10 * * *" },
+    { "path": "/api/cron?tarea=analizar&franja=11",                            "schedule": "0 11 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=infobae&franja=12",            "schedule": "0 12 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=perfil&franja=13",             "schedule": "0 13 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=eldestape&franja=14",          "schedule": "0 14 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=infobae&franja=15",            "schedule": "0 15 * * *" },
+    { "path": "/api/cron?tarea=redes&franja=16",                               "schedule": "0 16 * * *" },
+    { "path": "/api/cron?tarea=analizar&franja=17",                            "schedule": "0 17 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=infobae&franja=18",            "schedule": "0 18 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=perfil&franja=19",             "schedule": "0 19 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=pagina12&franja=20",           "schedule": "0 20 * * *" },
+    { "path": "/api/cron?tarea=recolectar&media=infobae&franja=21",            "schedule": "0 21 * * *" },
+    { "path": "/api/cron?tarea=mantenimiento&franja=22",                       "schedule": "0 22 * * *" },
+    { "path": "/api/cron?tarea=analizar&franja=23",                            "schedule": "0 23 * * *" }
   ]
 }

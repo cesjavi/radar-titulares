@@ -88,7 +88,9 @@ curl https://TU-DOMINIO/salud
 
 ## Recolección con Vercel Cron
 
-**Plan Hobby (configurado en `vercel.json`):** un ciclo diario. Hobby admite crons de una vez por día y los dispara en cualquier momento dentro de la hora indicada (±59 min), por eso cada tarea va en una hora distinta (UTC; 10:00 UTC = 7:00 de Buenos Aires): Perfil 10, Infobae 11, Página/12 12, El Destape 13, redes 14, análisis 15 y mantenimiento 16. Si dos se superponen, el bloqueo hace que la segunda responda "omitido". Con una sola pasada por día, los feeds que solo listan las últimas notas pueden no traer todo lo publicado en el día.
+**Plan Hobby (configurado en `vercel.json`):** Hobby admite hasta 100 crons por proyecto, pero cada uno corre **una vez por día** y se dispara en cualquier momento de su hora (±59 min). Para pasar más seguido se repite la tarea en varias entradas diarias (con `&franja=HH`, que solo hace única la ruta y se ignora), **una tarea por hora** para que no se pisen. Si igual se superponen, el bloqueo hace que la segunda responda "omitido".
+
+La frecuencia de cada medio sale de cuántas horas de publicación entran en su feed más largo (datos de Neon, 15 y 16/10/2026): Infobae publica ~390 notas por día y su feed trae 100 (~6 h), así que va **cada 3 horas**; Perfil (~16 h de feed) cada 6; El Destape (~33 h) y Página/12 (~22 h) cada 12; La Política Online (~5 días) una vez. Además: análisis cada 6 horas, redes cada 12 y mantenimiento una vez por día. En total 24 crons, uno por hora UTC (10:00 UTC = 7:00 de Buenos Aires). `tests/test_vercel_neon.py` comprueba que todos sean diarios y no compartan hora. `media=` acepta también los medios dados de alta en el panel.
 
 **Plan Pro:** reemplazá esos horarios por los de abajo. El trabajo se reparte para que cada invocación entre en `maxDuration`:
 

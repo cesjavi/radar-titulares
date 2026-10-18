@@ -17,7 +17,7 @@ import os
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from radar.collector.adapters import ADAPTERS
+from radar.collector.runner import check_media_slug
 from radar.config import ConfigError, get_settings
 from radar.pipeline import TASKS, run_cycle
 from radar.web.app import create_app
@@ -41,7 +41,8 @@ def cron(request: Request, tarea: str = "todo", media: str | None = None):
     """Ciclo programado (Vercel Cron). Protegido con `Authorization: Bearer $CRON_SECRET`.
 
     ?tarea=todo|recolectar|analizar|mantenimiento|redes   (por defecto, todo)
-    ?media=perfil|eldestape|infobae|pagina12   (solo con tarea=recolectar o todo)
+    ?media=<slug>   un medio con adaptador propio o dado de alta en el panel (solo con
+                    tarea=recolectar o todo)
 
     Para repartir el trabajo (duración máxima por invocación) se pueden definir varios crons,
     uno por medio y otro para el análisis. Es seguro repetirlo: el bloqueo y los intervalos
@@ -55,9 +56,11 @@ def cron(request: Request, tarea: str = "todo", media: str | None = None):
     if tarea not in TASKS:
         return JSONResponse({"estado": "error", "motivo": f"tarea inválida; opciones: {', '.join(TASKS)}"},
                             status_code=400)
-    if media is not None and media not in ADAPTERS:
-        return JSONResponse({"estado": "error", "motivo": f"medio inválido; opciones: {', '.join(sorted(ADAPTERS))}"},
-                            status_code=400)
+    try:
+        if media is not None:
+            check_media_slug(media)  # también los medios dados de alta en el panel
+    except ValueError as exc:
+        return JSONResponse({"estado": "error", "motivo": str(exc)}, status_code=400)
     try:
         return {"estado": "ok", **run_cycle(tarea, media)}
     except ValueError as exc:
