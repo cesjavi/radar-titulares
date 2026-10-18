@@ -361,6 +361,12 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - Métricas (`radar/metrics.py`, `agenda_metrics`): por par de medios, historias en común sobre historias de alguno (Jaccard), en total y por semana (lunes, hora de Buenos Aires; 8 semanas). Una historia es un grupo abierto o, si la nota no coincidió con nada, la nota sola; las réplicas no cuentan. Además, por medio, cuántas notas tuvieron coincidencia en otro medio y cuántas no (que incluye lo que el motor no relacionó). La tabla de secuencias suma el rango intercuartil de la diferencia de publicación.
 - Con datos reales de Neon: se recortan las semanas iniciales vacías (la base empieza el 5/10) y una semana no cuenta para un par si alguno no tiene notas (La Política Online se dio de alta después y daba 0 % sobre 660 historias). Los valores reales están entre 0,2 % y 5 %: la mayoría de las notas no coincide con otro medio. Tarda ~3,5 s contra Neon, en cada vista de Métricas.
 
+### Agregado: qué cambian los medios en sus titulares (2026-10-17)
+- `radar/analysis/headline_changes.py`: cada versión de feed contra la anterior, con los detectores del motor: cifra, negación o cese, nombre propio, reescritura amplia (menos de la mitad de las palabras en común, sin contar cifras ni nombres), solo forma, solo bajada u otro. Un cambio puede tener varias.
+- Historial → «Titulares modificados»: tabla por medio (notas de 30 días con cambios, cambios por categoría, mediana hasta el primer cambio, medida por detección) y etiquetas en cada paso de la línea de tiempo.
+- Con datos reales de Neon: 922 de 930 «cambios de bajada» de Infobae eran la misma nota primero por el sitemap (sin bajada) y después por el RSS (con bajada). Una bajada que aparece, desaparece o llega recortada ya no cuenta. Quedan Infobae 86 notas con cambios (2,4 %), Perfil 55, El Destape 25 y Página/12 16. ~3,7 s contra Neon en la primera página del historial.
+- Pendiente: el listado de «Titulares modificados» sigue mostrando las notas con más de una versión de feed, incluidas las que solo sumaron la bajada de otra subfuente (comportamiento previo).
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.

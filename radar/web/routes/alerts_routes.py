@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, selectinload
 from radar import runtime
 from radar.alerts.config import PRIORITIES
 from radar.alerts.engine import STATUSES, set_status
+from radar.analysis import headline_changes
 from radar.analysis.relations import TYPE_LABELS
 from radar.config import get_settings
 from radar.metrics import agenda_metrics, sequence_metrics
@@ -193,7 +194,7 @@ def review_queue(request: Request, db: Session = Depends(get_db), user: User = D
 def history(request: Request, tipo: str = Query("titulares", max_length=16),
             page: int = Query(1, ge=1, le=10000), db: Session = Depends(get_db),
             user: User = Depends(require_user)):
-    rows, total = [], 0
+    rows, total, extra = [], 0, {}
     if tipo == "titulares":
         # Artículos con más de una versión de origen "feed" (cambios hechos por el medio).
         changed = (select(HeadlineVersion.article_id).where(HeadlineVersion.origin == "feed")
@@ -206,6 +207,11 @@ def history(request: Request, tipo: str = Query("titulares", max_length=16),
         rows = db.scalars(stmt.options(selectinload(Article.versions), selectinload(Article.media))
                           .order_by(Article.last_seen_at.desc())
                           .offset((page - 1) * PER_PAGE).limit(PER_PAGE)).all()
+        extra["changes"] = {v_id: cats for a in rows
+                            for v_id, cats in headline_changes.transitions(a.versions).items()}
+        extra["categories"] = headline_changes.CATEGORIES
+        if page == 1:
+            extra["stats"] = headline_changes.change_stats(db, include_demo=demo_visible(request))
     elif tipo == "alertas":
         stmt = select(AlertEvent)
         total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
@@ -222,7 +228,8 @@ def history(request: Request, tipo: str = Query("titulares", max_length=16),
                           .offset((page - 1) * PER_PAGE).limit(PER_PAGE)).all()
     users = dict(db.execute(select(User.id, User.username)).all())
     return render(request, "history.html", {"tipo": tipo, "rows": rows, "page": page, "pages": pages,
-                                            "total": total, "users": users, "nav": "historial"},
+                                            "total": total, "users": users, "nav": "historial",
+                                            **extra},
                   user=user)
 
 

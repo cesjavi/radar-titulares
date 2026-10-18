@@ -30,7 +30,8 @@ app.py + vercel.json   punto de entrada y configuración para Vercel (VERCEL.md)
   collector/   adapters/ (uno por medio), generic.py (medios dados de alta en el panel), parsers.py, html.py, ingest.py, enrich.py,
                references.py, runner.py
   analysis/    textproc.py, vectorize.py (TF-IDF propio), relations.py (reglas),
-               grouping.py (anti-encadenamiento), engine.py, manual.py, evaluation.py (precisión), relevance.py (orden por interés), trends.py (temas en alza)
+               grouping.py (anti-encadenamiento), engine.py, manual.py, evaluation.py (precisión), relevance.py (orden por interés), trends.py (temas en alza),
+               headline_changes.py (qué cambia en los titulares)
   alerts/      config.py, engine.py (una alerta por grupo), common_source.py
   ai/          config.py, providers.py, openai_compat.py (Groq/Fireworks), prompt.py,
                schema.py, service.py

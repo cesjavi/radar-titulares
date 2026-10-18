@@ -9,12 +9,32 @@
 </nav>
 <p class="muted small">{{ total }} registro{{ 's' if total != 1 }}</p>
 {% if tipo == 'titulares' %}
+  {% if stats and stats.media %}
+  <section class="card" id="cambios-por-medio">
+    <h2>Qué cambian los medios (notas de los últimos {{ stats.days }} días)</h2>
+    <table class="table responsive">
+      <thead><tr><th>Medio</th><th>Notas con cambios</th><th>Cambios</th>{% for k, label in stats.categories.items() %}<th class="num small" title="{{ label }}">{{ label }}</th>{% endfor %}<th>Primer cambio (mediana)</th></tr></thead>
+      <tbody>
+      {% for s in stats.media %}
+        <tr>
+          <td data-label="Medio">{{ s.name }}</td>
+          <td data-label="Notas con cambios" class="num">{{ s.changed }} <span class="small muted">de {{ s.articles }}{% if s.changed_pct is not none %} ({{ '%.1f' | format(s.changed_pct) }} %){% endif %}</span></td>
+          <td data-label="Cambios" class="num">{{ s.changes }}</td>
+          {% for k, label in stats.categories.items() %}<td data-label="{{ label }}" class="num">{{ s.by_category.get(k, 0) }}</td>{% endfor %}
+          <td data-label="Primer cambio" class="num">{% if s.median_first_change_min is not none %}{{ s.median_first_change_min }} min{% else %}—{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="small muted">Un cambio puede tener varias categorías. Se detectan con las mismas reglas del motor (cifras, negaciones y «dejó de», nombres propios); no dicen por qué se cambió ni si la versión anterior estaba mal. El tiempo al primer cambio se mide por detección del radar: depende de cada cuánto se recolecta. Completar una bajada desde la página no cuenta como cambio del medio.</p>
+  </section>
+  {% endif %}
   {% for a in rows %}
   <section class="card">
     <p class="small muted">{{ a.media.name }}{% if a.author %} · Por {{ a.author }}{% endif %} · <a href="/noticias/{{ a.id }}">ficha</a></p>
     <ol class="timeline">
       {% for v in a.versions if v.origin == 'feed' %}
-      <li><div class="small muted">{{ v.detected_at | local_dt('%d/%m/%Y %H:%M') }}</div><div class="headline">{{ v.title }}</div>{% if v.subtitle %}<div class="small">{{ v.subtitle }}</div>{% endif %}</li>
+      <li><div class="small muted">{{ v.detected_at | local_dt('%d/%m/%Y %H:%M') }}{% for c in changes.get(v.id, []) %} <span class="badge badge-skipped" title="{{ categories[c] }}">{{ categories[c] }}</span>{% endfor %}</div><div class="headline">{{ v.title }}</div>{% if v.subtitle %}<div class="small">{{ v.subtitle }}</div>{% endif %}</li>
       {% endfor %}
     </ol>
   </section>
