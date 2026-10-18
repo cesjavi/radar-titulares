@@ -357,6 +357,10 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - Decisiones tomadas al probar con los datos reales de Neon (los sintéticos no lo mostraban): solo cuentan notas con hora de publicación (con la de detección, lo atrasado tras un hueco se amontonaba en una ventana); la cobertura se mide por hora de publicación y no de detección (en Vercel la recolección corre pocas veces por día); y la base excluye las ventanas con menos de la mitad del volumen total habitual de su franja horaria (hubo un hueco de recolección del 9 al 13 de octubre: esas ventanas incompletas bajaban «lo habitual» y daban falsas alzas). Si la ventana actual está incompleta o hay menos de 2 días de base, no se marca nada.
 - Verificado con Neon (solo lectura): ningún tema en alza ahora; en el pasado reciente, picos aislados de pocos temas. Tarda ~4 s por cálculo contra Neon.
 
+### Agregado: agenda compartida entre medios (2026-10-17)
+- Métricas (`radar/metrics.py`, `agenda_metrics`): por par de medios, historias en común sobre historias de alguno (Jaccard), en total y por semana (lunes, hora de Buenos Aires; 8 semanas). Una historia es un grupo abierto o, si la nota no coincidió con nada, la nota sola; las réplicas no cuentan. Además, por medio, cuántas notas tuvieron coincidencia en otro medio y cuántas no (que incluye lo que el motor no relacionó). La tabla de secuencias suma el rango intercuartil de la diferencia de publicación.
+- Con datos reales de Neon: se recortan las semanas iniciales vacías (la base empieza el 5/10) y una semana no cuenta para un par si alguno no tiene notas (La Política Online se dio de alta después y daba 0 % sobre 660 historias). Los valores reales están entre 0,2 % y 5 %: la mayoría de las notas no coincide con otro medio. Tarda ~3,5 s contra Neon, en cada vista de Métricas.
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.

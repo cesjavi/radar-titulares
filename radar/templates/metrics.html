@@ -1,7 +1,42 @@
 {% extends "base.html" %}
 {% block title %}Métricas · Radar de Titulares{% endblock %}
 {% block content %}
-<h1>Secuencias entre medios</h1>
+<h1>Métricas entre medios</h1>
+
+{% if agenda.pairs %}
+<section class="card" id="agenda">
+  <h2>Agenda compartida</h2>
+  <p class="small muted">Qué parte de sus historias cubren dos medios a la vez: historias en común sobre historias que cubre alguno de los dos (índice de Jaccard). Una historia es un grupo del radar o, si la nota no coincidió con nada, la nota sola. No incluye notas republicadas de agencias. Cubrir lo mismo <strong>no</strong> indica coordinación: puede haber una fuente común o un hecho que todos cubren.</p>
+  <table class="table responsive">
+    <thead><tr><th>Par</th><th>Últimas {{ agenda.weeks | length }} semanas</th>{% for w in agenda.weeks %}<th class="num small">{{ w.strftime('%d/%m') }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for p in agenda.pairs %}
+      <tr>
+        <td data-label="Par">{{ p.a }} / {{ p.b }}</td>
+        <td data-label="Total" class="num">{% if p.jaccard is not none %}{{ '%.1f' | format(p.jaccard * 100) }} % <span class="small muted">({{ p.shared }} de {{ p.union }})</span>{% else %}—{% endif %}</td>
+        {% for wk in p.weekly %}
+        <td data-label="Semana del {{ agenda.weeks[loop.index0].strftime('%d/%m') }}" class="num small">{% if wk and wk[1] %}{{ '%.0f' | format(100 * wk[0] / wk[1]) }} %<div class="muted">{{ wk[0] }}</div>{% else %}<span class="muted" title="Alguno de los dos medios no tiene notas esa semana">—</span>{% endif %}</td>
+        {% endfor %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="small muted">Cada semana empieza el lunes (hora de Buenos Aires). Debajo del porcentaje, la cantidad de historias en común: con pocas, el porcentaje varía mucho. «—»: alguno de los dos medios no tiene notas esa semana (sin recolección o dado de alta después); el total usa solo las semanas con los dos.</p>
+
+  <h3>Cobertura sin coincidencia en otro medio</h3>
+  <table class="table compact">
+    <thead><tr><th>Medio</th><th>Notas propias</th><th>Con coincidencia en otro medio</th><th>Sin coincidencia detectada</th></tr></thead>
+    <tbody>
+    {% for e in agenda.exclusive %}
+      <tr><td>{{ e.name }}</td><td class="num">{{ e.notes }}</td><td class="num">{{ e.shared }}</td><td class="num">{{ e.alone }}{% if e.notes %} <span class="small muted">({{ '%.0f' | format(100 * e.alone / e.notes) }} %)</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="small muted">«Sin coincidencia detectada» incluye tanto lo que solo cubrió ese medio como lo que el motor léxico no llegó a relacionar.</p>
+</section>
+{% endif %}
+
+<h2>Secuencias entre medios</h2>
 <section class="card">
   <p><strong>Métricas descriptivas.</strong> Cuentan, en los grupos donde coinciden dos medios, cuál publicó o fue detectado antes. Publicar antes <strong>no</strong> indica que un medio dirija, origine o copie a otro: puede deberse a horarios de cierre, a una fuente común (agencia, conferencia, informe) o a la frecuencia de consulta del radar.</p>
   <p class="small muted">Se excluyen notas republicadas. Se toma la primera nota de cada medio en el grupo. Grupos analizados: {{ m.groups }}.</p>
@@ -10,7 +45,7 @@
 <section class="card">
   <h2>Por pares de medios</h2>
   <table class="table responsive">
-    <thead><tr><th>Par</th><th>Grupos en común</th><th>Por publicación (con hora en ambos)</th><th>Cobertura temporal</th><th>Mediana de diferencia</th><th>Por detección del radar</th></tr></thead>
+    <thead><tr><th>Par</th><th>Grupos en común</th><th>Por publicación (con hora en ambos)</th><th>Cobertura temporal</th><th>Diferencia de publicación (mediana · rango intercuartil)</th><th>Por detección del radar</th></tr></thead>
     <tbody>
     {% for p in m.pairs %}
       <tr>
@@ -18,7 +53,7 @@
         <td data-label="Grupos" class="num">{{ p.groups }}</td>
         <td data-label="Publicación" class="small">{{ p.a }} antes: {{ p.pub_a_first }} · {{ p.b }} antes: {{ p.pub_b_first }} · simultáneas: {{ p.pub_tie }}<div class="muted">sin hora en alguno: {{ p.pub_unknown }}</div></td>
         <td data-label="Cobertura" class="num">{{ p.pub_coverage }}%</td>
-        <td data-label="Mediana" class="num">{% if p.median_gap_min is not none %}{{ p.median_gap_min }} min{% else %}—{% endif %}</td>
+        <td data-label="Diferencia" class="num">{% if p.median_gap_min is not none %}{{ p.median_gap_min }} min{% if p.gap_iqr_min %} <span class="small muted">({{ p.gap_iqr_min[0] }}–{{ p.gap_iqr_min[1] }})</span>{% endif %}{% else %}—{% endif %}</td>
         <td data-label="Detección" class="small">{{ p.a }} antes: {{ p.det_a_first }} · {{ p.b }} antes: {{ p.det_b_first }}</td>
       </tr>
     {% endfor %}

@@ -17,7 +17,7 @@ from radar.alerts.config import PRIORITIES
 from radar.alerts.engine import STATUSES, set_status
 from radar.analysis.relations import TYPE_LABELS
 from radar.config import get_settings
-from radar.metrics import sequence_metrics
+from radar.metrics import agenda_metrics, sequence_metrics
 from radar.queries import title_condition
 from radar.models import (
     Alert,
@@ -278,5 +278,7 @@ def chronology(request: Request, dias: int = Query(3, ge=1, le=30), db: Session 
 
 @router.get("/metricas")
 def metrics(request: Request, db: Session = Depends(get_db), user: User = Depends(viewer)):
-    data = sequence_metrics(db, include_demo=demo_visible(request))
-    return render(request, "metrics.html", {"m": data, "nav": "metricas"}, user=user)
+    demo = demo_visible(request)
+    data = sequence_metrics(db, include_demo=demo)
+    return render(request, "metrics.html", {"m": data, "agenda": agenda_metrics(db, demo),
+                                            "nav": "metricas"}, user=user)
