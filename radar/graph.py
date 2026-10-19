@@ -54,7 +54,11 @@ def _display_name(key: str, titles: list[str]) -> str | None:
         norm = [normalize_for_search(w.strip("\"'“”‘’«»:;,.¿?¡!()")) for w in words]
         for i in range(first, len(words) - len(target) + 1):
             if norm[i:i + len(target)] == target:
-                return " ".join(w.strip("\"'“”‘’«»:;,.¿?¡!()") for w in words[i:i + len(target)])
+                found = [w.strip("\"'“”‘’«»:;,.¿?¡!()") for w in words[i:i + len(target)]]
+                # Con mayúscula al principio y al final («Fiscal de Estado», «PASO»): la misma
+                # palabra en minúscula («un paso») no es el nombre.
+                if found[0][:1].isupper() and found[-1][:1].isupper():
+                    return " ".join(found)
     return None
 
 

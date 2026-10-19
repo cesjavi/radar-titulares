@@ -3,6 +3,7 @@
 {% block content %}
 {% set tone_labels = {'favorable': 'Favorable', 'critico': 'Crítico', 'neutral': 'Neutral', 'incierto': 'Incierto'} %}
 <div class="report">
+{% if not report %}{% set tab = 'periodo' %}{% include "partials/report_tabs.html" %}{% endif %}
 <h1>{% if report %}{{ report.title }}{% else %}Informes{% endif %}</h1>
 <p class="muted">
   Del {{ desde.strftime('%d/%m/%Y') }} al {{ hasta.strftime('%d/%m/%Y') }} (hora de Buenos Aires){% if data.media %} · solo <strong>{{ data.media.name }}</strong>{% else %} · todos los medios{% endif %}.
@@ -229,6 +230,25 @@
   {% endif %}
   {% else %}<p class="muted">Ningún grupo del período tiene análisis de IA.</p>{% endif %}
 </section>
+
+{% if data.media_extra %}
+{% set mx = data.media_extra %}
+<section class="card" id="medio">
+  <div class="card-head"><h2>8. {{ data.media.name }}: notas propias, fechas y firmas</h2>{{ csv_link('propias') }}</div>
+  <div class="stats">
+    <div class="stat"><span class="stat-value">{{ mx.own_total }}</span><span class="stat-label">Notas sin coincidencia detectada en otro medio</span></div>
+    <div class="stat"><span class="stat-value">{% if mx.total %}{{ '%.0f' | format(100 * mx.signed / mx.total) }} %{% else %}—{% endif %}</span><span class="stat-label">Notas firmadas ({{ mx.signed }} de {{ mx.total }})</span></div>
+    <div class="stat"><span class="stat-value">{% if mx.total %}{{ '%.0f' | format(100 * mx.precision.datetime / mx.total) }} %{% else %}—{% endif %}</span><span class="stat-label">Con fecha y hora de publicación</span></div>
+  </div>
+  <p class="small muted">«Sin coincidencia detectada» incluye lo que solo cubrió este medio y lo que el motor léxico no llegó a relacionar con otro. No cuenta notas republicadas. Fechas: {{ mx.precision.datetime }} con fecha y hora, {{ mx.precision.date }} solo con fecha y {{ mx.precision.none }} sin dato; la diferencia de horas con otros medios solo se calcula cuando las dos notas tienen hora.</p>
+  {% if mx.own_notes %}
+  <details>
+    <summary>Las {{ mx.own_notes | length }} más recientes{% if mx.own_total > mx.own_notes | length %} (de {{ mx.own_total }}){% endif %}</summary>
+    <ul class="compact-list">{% for n in mx.own_notes %}<li><a href="/noticias/{{ n.id }}">{{ n.title }}</a> <span class="small muted">· {{ n.first_seen | iso_dt }}</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
 
 <p class="small muted">Generado el {{ data.generated_at | iso_dt }} · versión del motor léxico {{ data.algorithm_version }}{% if report %} · los enlaces a grupos pueden no existir más si se reprocesaron o vencieron por retención{% endif %}.</p>
 

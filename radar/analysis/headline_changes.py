@@ -164,3 +164,54 @@ def change_stats(db: Session, days: int = 30, include_demo: bool = False,
         totals.update(st.by_category)
     return {"days": days, "media": sorted(per_media.values(), key=lambda s: s.name),
             "totals": totals, "categories": CATEGORIES}
+
+
+def change_list(db: Session, since: datetime, until: datetime, media_id: int | None = None,
+                category: str | None = None, include_demo: bool = False,
+                limit: int = 200) -> dict:
+    """Notas detectadas en [since, until) cuyo titular o bajada cambió, con cada versión y las
+    categorías de cada cambio. `category` deja solo las notas con algún cambio de esa categoría.
+    Las más recientemente cambiadas primero."""
+    art_filter = [Article.first_seen_at >= since, Article.first_seen_at < until]
+    if media_id is not None:
+        art_filter.append(Article.media_id == media_id)
+    if not include_demo:
+        art_filter.append(Article.is_demo.is_(False))
+    changed_ids = (select(HeadlineVersion.article_id)
+                   .join(Article, Article.id == HeadlineVersion.article_id)
+                   .where(HeadlineVersion.origin == "feed", *art_filter)
+                   .group_by(HeadlineVersion.article_id).having(func.count() > 1))
+    names = dict(db.execute(select(Media.id, Media.name)).all())
+    rows = db.execute(
+        select(HeadlineVersion.article_id, Article.media_id, Article.url, HeadlineVersion.title,
+               HeadlineVersion.subtitle, HeadlineVersion.detected_at)
+        .join(Article, Article.id == HeadlineVersion.article_id)
+        .where(HeadlineVersion.origin == "feed", HeadlineVersion.article_id.in_(changed_ids))
+        .order_by(HeadlineVersion.article_id, HeadlineVersion.detected_at, HeadlineVersion.id))
+    by_article: dict[int, list] = defaultdict(list)
+    info: dict[int, tuple[int, str]] = {}
+    for aid, mid, url, title, sub, detected in rows:
+        by_article[aid].append((title, sub, detected))
+        info[aid] = (mid, url)
+    items = []
+    for aid, vs in by_article.items():
+        versions = [{"title": vs[0][0], "subtitle": vs[0][1], "detected_at": vs[0][2],
+                     "categories": []}]
+        seen: set[str] = set()
+        for (pt, ps, _pd), (ct, cs, cd) in zip(vs, vs[1:]):
+            cats = classify(pt, ps, ct, cs)
+            if not cats:
+                continue  # misma versión vista de nuevo
+            seen.update(cats)
+            versions.append({"title": ct, "subtitle": cs, "detected_at": cd, "categories": cats})
+        if len(versions) < 2 or (category and category not in seen):
+            continue
+        mid, url = info[aid]
+        items.append({"article_id": aid, "media": names.get(mid, "?"), "url": url,
+                      "versions": versions, "categories": [c for c in CATEGORIES if c in seen],
+                      "first_change_min": round((versions[1]["detected_at"]
+                                                 - versions[0]["detected_at"]).total_seconds() / 60),
+                      "last_change": versions[-1]["detected_at"]})
+    items.sort(key=lambda x: x["last_change"], reverse=True)
+    return {"total": len(items), "items": items[:limit], "truncated": len(items) > limit,
+            "categories": CATEGORIES}

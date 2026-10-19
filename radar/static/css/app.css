@@ -735,6 +735,27 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
 .g-on .g-label-hover, .g-item:hover .g-label-hover { display: inline; }
 .g-edge.g-on { stroke-width: 2.6; }
 
+/* Informes: pestañas, cambios de titular y resúmenes */
+.report-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--border); }
+.report-tabs a { padding: 8px 12px; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.report-tabs a:hover { color: var(--text); }
+.report-tabs a.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.versions { margin: 0; padding-left: 22px; }
+.versions li { margin-bottom: 10px; }
+.version-old { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.badge-change-cifra, .badge-change-negacion { color: var(--warn); border-color: var(--warn); }
+.badge-change-nombre, .badge-change-reescritura { color: var(--accent); border-color: var(--accent); }
+.badge-change-forma, .badge-change-bajada, .badge-change-otro { color: var(--muted); border-color: var(--border); }
+.summary-text { max-width: 760px; }
+.filters-bar .filter-item { max-width: 100%; min-width: 0; }
+.filters-bar select, .filters-bar input { max-width: 100%; min-width: 0; }
+@media (max-width: 768px) {
+  /* Tablas de varias columnas del informe: se desplazan dentro de la tarjeta, no la página. */
+  .report .table.compact { display: block; overflow-x: auto; }
+}
+.summary-text p { line-height: 1.65; }
+.summary-input { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .8rem; max-height: 420px; overflow: auto; background: var(--surface-alt); padding: 10px; border-radius: var(--radius-sm); }
+
 /* Mapa de calor de la agenda compartida (Métricas) */
 .heat-cell { text-align: center; }
 .heat-1 { background: var(--heat-1); color: var(--heat-ink-1); }

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ out.titulo or 'Resumen' }} · Radar de Titulares{% endblock %}
+{% block content %}
+<div class="report">
+{% include "partials/report_tabs.html" %}
+{% if message %}<p class="alert alert-warn no-print" role="status">{{ message }}</p>{% endif %}
+
+{% if row.status == 'ok' %}
+<article class="card summary-text">
+  <h1>{{ out.titulo }}</h1>
+  <p class="small muted">Del {{ first.strftime('%d/%m/%Y') }} al {{ last.strftime('%d/%m/%Y') }} · escrito por IA ({{ row.provider }} / {{ row.model }}) con los datos agregados del radar{% if row.review_status == 'aprobado' %} y revisado por una persona{% endif %}.</p>
+  {% if row.review_status != 'aprobado' %}<p class="alert alert-warn">{% if row.review_status == 'rechazado' %}Borrador rechazado: no se publica.{% else %}Borrador sin revisar: todavía no lo ve el público.{% endif %}</p>{% endif %}
+  {% for p in out.parrafos %}<p>{{ p }}</p>{% endfor %}
+  {% if out.limitaciones %}<h2>Limitaciones</h2><ul class="small">{% for l in out.limitaciones %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
+  <p class="small muted">Las coincidencias entre medios son de palabras: no prueban que digan lo mismo ni coordinación, y el orden en que publican no indica quién originó una información. El resumen no dice qué es verdad.</p>
+</article>
+{% else %}
+<section class="card">
+  <h1>Resumen #{{ row.id }}</h1>
+  <p class="alert alert-error">No se generó: {{ {'invalido': 'la respuesta no pasó la validación', 'rechazado': 'el modelo declinó', 'error': 'falló la llamada al proveedor'}.get(row.status, row.status) }}.</p>
+  {% if errors %}<ul class="small">{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+</section>
+{% endif %}
+
+{% if user and user.is_admin and row.status == 'ok' %}
+<section class="card no-print">
+  <h2>Revisión</h2>
+  <p class="small muted">Aprobá solo si cada afirmación se sostiene con los datos de abajo. {% if reviewer %}Última revisión: {{ reviewer }}, {{ row.reviewed_at | local_dt }}.{% endif %}</p>
+  <form method="post" action="/informes/resumenes/{{ row.id }}/revisar" class="row-buttons">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if row.review_status != 'aprobado' %}<button class="btn" type="submit" name="decision" value="aprobado">Aprobar y publicar</button>{% endif %}
+    {% if row.review_status != 'rechazado' %}<button class="btn btn-ghost" type="submit" name="decision" value="rechazado">Rechazar</button>{% endif %}
+    {% if row.review_status != 'pendiente' %}<button class="btn btn-ghost" type="submit" name="decision" value="pendiente">Volver a pendiente</button>{% endif %}
+  </form>
+</section>
+{% endif %}
+
+<details class="card">
+  <summary>Datos que recibió la IA</summary>
+  <p class="small muted">Es todo lo que tuvo para escribir: cualquier cifra del texto tiene que estar acá.</p>
+  <pre class="summary-input">{{ input_text }}</pre>
+</details>
+<p class="no-print"><a href="/informes/resumenes">← Todos los resúmenes</a> · <button class="btn btn-ghost btn-small" type="button" data-print>Imprimir o guardar como PDF</button></p>
+</div>
+{% endblock %}
