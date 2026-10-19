@@ -101,5 +101,5 @@ def test_summary_shows_rising_topics(client, admin, db):
     db.commit()
     login(client)
     body = client.get("/").text
-    assert "En alza" in body and "/noticias?topic=tarifas&periodo=24h" in body
+    assert "Temas en alza" in body and "/noticias?topic=tarifas&periodo=24h" in body
     assert "no explica por qué" in body

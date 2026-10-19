@@ -24,9 +24,9 @@
     <p class="small muted"><span class="media-tag">{{ a.media.name }}</span>{% if a.origin_label %} · {{ a.origin_label }}{% endif %}{% if a.is_syndicated %} · <span class="badge badge-syndicated">republicada</span>{% endif %}{% if a.is_demo %} <span class="badge badge-demo">DEMO</span>{% endif %}</p>
     <h2 class="headline-md">{{ segs(s.title) }}</h2>
     {% if a.author %}
-      <p class="small"><span class="badge badge-author-has">✍️ Por {{ a.author }}</span></p>
+      <p class="small"><span class="badge badge-author-has">Por {{ a.author }}</span></p>
     {% else %}
-      <p class="small"><span class="badge badge-author-none">⚪ Sin firma individual</span></p>
+      <p class="small"><span class="badge badge-author-none">Sin firma individual</span></p>
     {% endif %}
     <dl class="meta">
       <dt>Publicada</dt><dd>{{ fmt_pub(a) }}</dd>

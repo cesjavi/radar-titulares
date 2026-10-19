@@ -76,5 +76,5 @@ def test_summary_shows_data_freshness_and_refreshes_itself(client, admin, db):
 
     login(client)
     body = client.get("/").text
-    assert "Última recolección exitosa" in body and "pantalla actualizada" in body
+    assert "(última recolección exitosa)" in body and "se refresca cada 2 minutos" in body
     assert 'hx-trigger="every 120s"' in body and 'id="resumen"' in body

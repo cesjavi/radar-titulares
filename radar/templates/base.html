@@ -7,8 +7,10 @@
   <title>{% block title %}Radar de Titulares{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='css/app.css') }}">
+  <script src="{{ url_for('static', path='js/theme.js') }}"></script>
   <script src="{{ url_for('static', path='js/htmx.min.js') }}" defer></script>
   <script src="{{ url_for('static', path='js/panel.js') }}" defer></script>
+  {% block scripts %}{% endblock %}
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{ csrf_token }}"}'>
   {% if demo_mode %}
@@ -30,11 +32,11 @@
     <nav class="nav">
       <div class="nav-primary">
         <a href="/" class="nav-link {{ 'active' if nav == 'resumen' }}">Inicio</a>
-        <a href="/grupos" class="nav-link {{ 'active' if nav == 'grupos' }}">🎯 Grupos</a>
-        <a href="/sentimiento" class="nav-link {{ 'active' if nav == 'sentimiento' }}">📊 Sentimiento</a>
-        <a href="/noticias" class="nav-link {{ 'active' if nav == 'noticias' }}">📰 Noticias</a>
+        <a href="/grupos" class="nav-link {{ 'active' if nav == 'grupos' }}">Grupos</a>
+        <a href="/sentimiento" class="nav-link {{ 'active' if nav == 'sentimiento' }}">Sentimiento</a>
+        <a href="/noticias" class="nav-link {{ 'active' if nav == 'noticias' }}">Noticias</a>
         {% if not user.is_anonymous or public_alerts != 'ninguna' %}
-        <a href="/alertas" class="nav-link {{ 'active' if nav == 'alertas' }}">⚡ Alertas</a>
+        <a href="/alertas" class="nav-link {{ 'active' if nav == 'alertas' }}">Alertas</a>
         {% endif %}
       </div>
 
@@ -45,21 +47,22 @@
           </button>
           <div class="nav-dropdown-menu">
             <a href="/cronologia" class="{{ 'active' if nav == 'cronologia' }}">⏱️ Cronología</a>
-            {% if not user.is_anonymous %}<a href="/redes" class="{{ 'active' if nav == 'redes' }}">💬 Redes</a>{% endif %}
+            <a href="/redes" class="{{ 'active' if nav == 'redes' }}">Redes</a>
             {% if not user.is_anonymous %}
-            <a href="/revision" class="{{ 'active' if nav == 'revision' }}">✍️ Revisión</a>
-            <a href="/historial" class="{{ 'active' if nav == 'historial' }}">📜 Historial</a>
+            <a href="/revision" class="{{ 'active' if nav == 'revision' }}">Revisión</a>
+            <a href="/historial" class="{{ 'active' if nav == 'historial' }}">Historial</a>
             {% endif %}
-            <a href="/metricas" class="{{ 'active' if nav == 'metricas' }}">📈 Métricas</a>
-            <a href="/informes" class="{{ 'active' if nav == 'informes' }}">📑 Informes</a>
-            {% if user.can_analyze %}<a href="/evaluacion" class="{{ 'active' if nav == 'evaluacion' }}">🎯 Evaluación del motor</a>{% endif %}
-            <a href="/fuentes" class="{{ 'active' if nav == 'fuentes' }}">🌐 Fuentes</a>
-            {% if not user.is_anonymous %}<a href="/ejecuciones" class="{{ 'active' if nav == 'ejecuciones' }}">⚙️ Ejecuciones</a>{% endif %}
-            {% if user.is_admin %}<a href="/configuracion" class="{{ 'active' if nav == 'configuracion' }}">🔧 Configuración</a>
-            {% elif not user.is_anonymous %}<a href="/configuracion/cuenta" class="{{ 'active' if nav == 'cuenta' }}">👤 Mi cuenta</a>{% endif %}
+            <a href="/metricas" class="{{ 'active' if nav == 'metricas' }}">Métricas</a>
+            <a href="/informes" class="{{ 'active' if nav == 'informes' }}">Informes</a>
+            {% if user.can_analyze %}<a href="/evaluacion" class="{{ 'active' if nav == 'evaluacion' }}">Evaluación del motor</a>{% endif %}
+            <a href="/fuentes" class="{{ 'active' if nav == 'fuentes' }}">Fuentes</a>
+            {% if not user.is_anonymous %}<a href="/ejecuciones" class="{{ 'active' if nav == 'ejecuciones' }}">Ejecuciones</a>{% endif %}
+            {% if user.is_admin %}<a href="/configuracion" class="{{ 'active' if nav == 'configuracion' }}">Configuración</a>
+            {% elif not user.is_anonymous %}<a href="/configuracion/cuenta" class="{{ 'active' if nav == 'cuenta' }}">Mi cuenta</a>{% endif %}
           </div>
         </div>
 
+        <button type="button" class="theme-btn" data-theme-toggle title="Cambiar entre tema automático, claro y oscuro (se recuerda en este navegador)">Tema: automático</button>
         {% if user.is_anonymous %}
         <a href="/login" class="nav-login">Ingresar</a>
         {% else %}

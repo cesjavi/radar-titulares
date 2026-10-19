@@ -71,6 +71,11 @@ def _demo_filter(stmt, request: Request):
     return stmt.where(Alert.group_id.not_in(demo_groups))
 
 
+# Tipos de relación que van a la cola de revisión (y que la portada cuenta como pendientes).
+REVIEW_QUEUE_TYPES = ("titular_identico", "titular_casi_identico", "expresion_compartida",
+                      "mismo_hecho", "afirmaciones_distintas", "referencia_explicita")
+
+
 def public_alert_statuses() -> tuple[str, ...]:
     """Estados de alerta visibles para visitantes (RADAR_PUBLIC_ALERTS)."""
     return {"revisadas": ("revisada",), "todas": ("pendiente", "revisada"),
@@ -180,9 +185,7 @@ def review_queue(request: Request, db: Session = Depends(get_db), user: User = D
              .options(selectinload(ArticleRelation.article_a).selectinload(Article.media),
                       selectinload(ArticleRelation.article_b).selectinload(Article.media))
              .where(ArticleRelation.review_status == "pendiente",
-                    ArticleRelation.relation_type.in_(("titular_identico", "titular_casi_identico",
-                                                       "expresion_compartida", "mismo_hecho",
-                                                       "afirmaciones_distintas", "referencia_explicita")))
+                    ArticleRelation.relation_type.in_(REVIEW_QUEUE_TYPES))
              .order_by(ArticleRelation.score.desc()).limit(60))
     rels = [r for r in db.scalars(rel_q)
             if demo_visible(request) or not (r.article_a.is_demo or r.article_b.is_demo)]

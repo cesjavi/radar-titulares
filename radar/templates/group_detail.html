@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Grupo #{{ g.id }} · Radar de Titulares{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='js/graph.js') }}" defer></script>{% endblock %}
 {% block content %}
 <p><a href="/grupos">← Grupos</a></p>
 {% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
@@ -57,18 +58,58 @@
   {% endif %}
 </section>
 
-<section class="card">
+<section class="card" id="grafo">
+  <h2>Mapa de la historia</h2>
+  <p class="small muted">Medios, notas, nombres que aparecen en los titulares y posteos de redes vinculados. <strong>Una línea</strong> une cosas que comparten palabras o que se publicaron juntas: no dice que el mensaje sea el mismo ni que haya coordinación. <strong>Una flecha</strong> aparece solo cuando hay una cita, un enlace o un reenvío explícito. El orden de las horas nunca dibuja una flecha.</p>
+  <div class="graph-legend small" aria-hidden="true">
+    <span><svg viewBox="0 0 20 20"><circle class="g-node g-medio" cx="10" cy="10" r="8"></circle></svg>Medio</span>
+    <span><svg viewBox="0 0 20 20"><circle class="g-node g-nota" cx="10" cy="10" r="5"></circle></svg>Nota</span>
+    <span><svg viewBox="0 0 20 20"><circle class="g-node g-actor" cx="10" cy="10" r="6"></circle></svg>Nombre en los titulares</span>
+    <span><svg viewBox="0 0 20 20"><circle class="g-node g-cuenta" cx="10" cy="10" r="7"></circle></svg>Cuenta de red social</span>
+    <span><svg viewBox="0 0 20 20"><circle class="g-node g-posteo" cx="10" cy="10" r="4"></circle></svg>Posteo</span>
+    <span><svg viewBox="0 0 34 10"><line class="g-edge g-coincide" x1="1" y1="5" x2="33" y2="5"></line></svg>palabras en común</span>
+    <span><svg viewBox="0 0 34 10"><line class="g-edge g-cita" x1="1" y1="5" x2="27" y2="5"></line><path class="g-arrow" d="M26 1 L33 5 L26 9 Z"></path></svg>cita, enlace o reenvío</span>
+  </div>
+  <div class="graph-box" data-graph-url="/grupos/{{ g.id }}/grafo">
+    <p class="small muted graph-status" role="status">Cargando el mapa…</p>
+  </div>
+  <details class="graph-list small">
+    <summary>Ver las conexiones como lista</summary>
+    <ul></ul>
+  </details>
+</section>
+
+<section class="card" id="ia">
   <h2>Análisis con IA del grupo</h2>
   {% if ai_message %}<p class="alert alert-warn" role="status">{{ ai_message }}</p>{% endif %}
   {% if ai %}
   <p class="small muted">Generado por {{ ai.provider }} / {{ ai.model }} el {{ ai.created_at | local_dt }}. Compara las {{ ai_notes | length }} notas juntas. Es una lectura automática: la revisión humana manda y no determina qué afirmación es cierta.</p>
+  {% if public_view %}
+  <p class="small"><span class="badge origin-user">Lectura revisada por una persona</span></p>
+  {% else %}
+  <p class="small"><span class="badge review-{{ ai.review_status }}">Revisión: {{ ai.review_status }}</span>
+    {% if ai.review_status == 'pendiente' %}<span class="muted">No se muestra en la vista pública hasta que se confirme.</span>
+    {% elif ai.review_status == 'rechazada' %}<span class="muted">No cuenta en Sentimiento ni en el resumen, y no se muestra en la vista pública.</span>{% endif %}</p>
+  {% if user and user.is_admin %}
+  <form method="post" action="/grupos/{{ g.id }}/ia/{{ ai.id }}/revisar" class="stack narrow">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Nota <input name="note" maxlength="2000"></label>
+    <div class="row-buttons">
+      {% if ai.review_status != 'confirmada' %}<button type="submit" name="decision" value="confirmada" class="btn">Confirmar la lectura</button>{% endif %}
+      {% if ai.review_status != 'rechazada' %}<button type="submit" name="decision" value="rechazada" class="btn btn-ghost">Rechazar</button>{% endif %}
+      {% if ai.review_status != 'pendiente' %}<button type="submit" name="decision" value="pendiente" class="btn btn-ghost">Volver a pendiente</button>{% endif %}
+    </div>
+  </form>
+  <p class="small muted">Confirmar dice que la lectura del tono y el enfoque es razonable según las notas, no que alguna afirmación sea cierta. Un análisis nuevo del grupo empieza pendiente.</p>
+  {% endif %}
+  {% endif %}
   {% if ai_flags %}<div class="alert alert-warn"><strong>Discrepancias para revisión:</strong><ul>{% for f in ai_flags %}<li>{{ f }}</li>{% endfor %}</ul></div>{% endif %}
   <ul class="small">{% for letter, art in ai_notes %}<li><strong>{{ letter }}</strong> · {% if art %}{{ art.media.name }}: {{ art.title }}{% else %}nota no disponible{% endif %}</li>{% endfor %}</ul>
   <dl class="meta compact-meta">
     <dt>¿Mismo hecho?</dt><dd>{{ ai_data.mismo_hecho }}</dd>
     <dt>Tema compartido</dt><dd>{{ ai_data.tema_compartido }}</dd>
     <dt>Enfoque</dt><dd><span class="badge {{ 'badge-sentiment-opuesto' if ai_data.enfoque == 'opuesto' else 'badge-sentiment-neutral' }}">{{ ai_data.enfoque }}</span></dd>
-    <dt>Tono por nota (lectura de la IA, sin verificar)</dt><dd>{% for t in ai_data.tono_por_nota %}<strong>{{ t.articulo }}:</strong> <span class="badge badge-sentiment-{{ t.valoracion }}">{{ t.valoracion }}</span>{% if t.sujeto %} hacia <em>{{ t.sujeto }}</em>{% endif %}{% if t.fragmento %} <span class="small muted">(“{{ t.fragmento }}”)</span>{% endif %}{% if not loop.last %}<br style="margin-bottom: 4px;">{% endif %}{% else %}—{% endfor %}</dd>
+    <dt>Tono por nota (lectura de la IA, sin verificar)</dt><dd>{% for t in ai_data.tono_por_nota %}<strong>{{ t.articulo }}:</strong> <span class="badge badge-sentiment-{{ t.valoracion }}">{{ t.valoracion }}</span>{% if t.sujeto %} hacia <em>{{ t.sujeto }}</em>{% endif %}{% if t.fragmento %} <span class="small muted">(“{{ t.fragmento }}”)</span>{% endif %}{% if not loop.last %}<br>{% endif %}{% else %}—{% endfor %}</dd>
     <dt>Entidades compartidas</dt><dd>{{ ai_data.entidades_compartidas | join(', ') or '—' }}</dd>
     <dt>Alcance geográfico</dt><dd>coincide: {{ ai_data.alcance_geografico.coincide }}{% if ai_data.alcance_geografico.detalle %} · {{ ai_data.alcance_geografico.detalle }}{% endif %}</dd>
     <dt>Período de los datos</dt><dd>coincide: {{ ai_data.periodo_de_los_datos.coincide }}{% if ai_data.periodo_de_los_datos.detalle %} · {{ ai_data.periodo_de_los_datos.detalle }}{% endif %}</dd>

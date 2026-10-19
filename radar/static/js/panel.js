@@ -35,7 +35,31 @@
     }).catch(function () {});
   });
 
+  // <button data-theme-toggle>: automático (sigue al sistema) → claro → oscuro. Se guarda en este
+  // navegador; js/theme.js lo aplica antes de pintar la página.
+  var THEMES = ["auto", "light", "dark"];
+  var THEME_LABELS = {auto: "Tema: automático", light: "Tema: claro", dark: "Tema: oscuro"};
+  function currentTheme() { return document.documentElement.getAttribute("data-theme") || "auto"; }
+  function paintThemeButtons() {
+    var label = THEME_LABELS[currentTheme()] || THEME_LABELS.auto;
+    Array.prototype.forEach.call(document.querySelectorAll("[data-theme-toggle]"), function (b) {
+      b.textContent = label;
+    });
+  }
+  document.addEventListener("click", function (ev) {
+    if (!(ev.target.closest && ev.target.closest("[data-theme-toggle]"))) return;
+    var next = THEMES[(THEMES.indexOf(currentTheme()) + 1) % THEMES.length];
+    if (next === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", next);
+    try {
+      if (next === "auto") localStorage.removeItem("radar-theme");
+      else localStorage.setItem("radar-theme", next);
+    } catch (e) { /* sin almacenamiento: vale solo para esta página */ }
+    paintThemeButtons();
+  });
+
   document.addEventListener("DOMContentLoaded", function () {
+    paintThemeButtons();
     var form = document.getElementById("form-recolectar");
     if (form) setupCollect(form);
   });

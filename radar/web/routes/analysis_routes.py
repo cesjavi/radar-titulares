@@ -7,7 +7,7 @@ import math
 from urllib.parse import quote, urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -18,6 +18,8 @@ from radar.ai.service import (
     analyze_group_for_admin,
     blocked_reason,
     group_articles,
+    REVIEW_STATES,
+    current_group_analysis,
     latest_for_group,
     pair_filter,
 )
@@ -26,6 +28,7 @@ from radar.analysis.manual import (
     ManualError,
     merge_groups,
     remove_member,
+    review_group_ai,
     review_relation,
     set_group_hidden,
     split_group,
@@ -33,6 +36,7 @@ from radar.analysis.manual import (
 from radar.analysis.relations import RULES, TYPE_LABELS
 from radar.analysis.textproc import highlight
 from radar.config import get_settings
+from radar.graph import group_graph
 from radar.queries import title_condition
 from radar.models import (
     AiAnalysis,
@@ -48,6 +52,7 @@ from radar.models import (
 from radar.web.deps import (
     demo_visible,
     get_db,
+    is_public,
     render,
     require_admin,
     require_analyst,
@@ -162,7 +167,7 @@ def group_list(request: Request, q: str = Query("", max_length=100),
             has_fav = any(t.get("valoracion") == "favorable" for t in tones)
             has_crit = any(t.get("valoracion") == "critico" for t in tones)
             if enfoque == "opuesto" or (has_fav and has_crit):
-                sentiment_info = {"tipo": "opuesto", "label": "Enfoques opuestos ⚠️"}
+                sentiment_info = {"tipo": "opuesto", "label": "Enfoques opuestos"}
             elif enfoque == "diferente":
                 sentiment_info = {"tipo": "diferente", "label": "Enfoques distintos"}
             elif tones:
@@ -219,7 +224,7 @@ def group_detail(request: Request, group_id: int, db: Session = Depends(get_db),
                                                        StoryGroup.id != group.id)
                               .order_by(StoryGroup.id.desc()).limit(50)).all()
     ai_cfg = load_ai_config(db)
-    ai = latest_for_group(db, group.id)
+    ai = latest_for_group(db, group.id, public=is_public(request))
     ai_notes = []
     if ai:
         by_id = {m.article_id: m.article for m in group.members}
@@ -237,6 +242,16 @@ def group_detail(request: Request, group_id: int, db: Session = Depends(get_db),
         "ai_message": request.query_params.get("ia"),
         "ai_note_count": len(group_articles(group)),
     }, user=user)
+
+
+@router.get("/grupos/{group_id}/grafo")
+def group_graph_data(request: Request, group_id: int, db: Session = Depends(get_db),
+                     user: User = Depends(viewer)):
+    """Nodos y aristas del grafo de la historia (lo dibuja static/js/graph.js)."""
+    group = _load_group(db, group_id)
+    articles = [m.article for m in group.members
+                if m.status == "activo" and m.article is not None and _visible(m.article, request)]
+    return JSONResponse(group_graph(db, group, articles))
 
 
 @router.get("/relaciones/{rel_id}")
@@ -342,6 +357,20 @@ def group_hide(group_id: int, request: Request, ocultar: bool = Form(True),
     return RedirectResponse(safe_return(volver, f"/grupos/{group_id}"), status_code=303)
 
 
+@router.post("/grupos/{group_id}/ia/{analysis_id}/revisar", dependencies=[Depends(verify_csrf)])
+def group_ai_review(group_id: int, analysis_id: int, decision: str = Form(...),
+                    note: str = Form("", max_length=2000), db: Session = Depends(get_db),
+                    user: User = Depends(require_admin)):
+    analysis = db.get(AiGroupAnalysis, analysis_id)
+    if analysis is None or analysis.group_id != group_id:
+        raise HTTPException(status_code=404, detail="El análisis no existe.")
+    try:
+        review_group_ai(db, analysis, decision, user, note)
+    except ManualError as exc:
+        return RedirectResponse(f"/grupos/{group_id}?ia={quote(str(exc))}", status_code=303)
+    return RedirectResponse(f"/grupos/{group_id}#ia", status_code=303)
+
+
 @router.post("/grupos/{group_id}/quitar", dependencies=[Depends(verify_csrf)])
 def group_remove(group_id: int, article_id: int = Form(...), note: str = Form("", max_length=2000),
                  db: Session = Depends(get_db), user: User = Depends(require_admin)):
@@ -405,13 +434,19 @@ def sentiment_dashboard(
     request: Request,
     valoracion: str = Query("", max_length=16),
     media: str = Query("", max_length=64),
+    revision: str = Query("", max_length=16),
     db: Session = Depends(get_db),
     user: User = Depends(viewer),
 ):
     demo = demo_visible(request)
+    public = is_public(request)
+    # El análisis vigente de cada grupo (uno viejo no suma dos veces el tono de las mismas notas).
+    # Los visitantes solo ven los confirmados y no pueden filtrar por revisión.
+    revision = "" if public or revision not in REVIEW_STATES else revision
     group_analyses = db.scalars(
         select(AiGroupAnalysis)
-        .where(AiGroupAnalysis.status == "ok")
+        .join(StoryGroup, StoryGroup.id == AiGroupAnalysis.group_id)
+        .where(current_group_analysis(public, revision or None), StoryGroup.hidden_at.is_(None))
         .order_by(AiGroupAnalysis.created_at.desc())
         .limit(100)
     ).all()
@@ -443,6 +478,13 @@ def sentiment_dashboard(
             .where(StoryGroup.id.in_(group_ids))
         ).all()
         groups_map = {g.id: g for g in grps}
+
+    # Lista por grupo para revisar las lecturas (solo usuarios con sesión).
+    review_list = [] if public else [
+        {"group_id": ga.group_id, "title": groups_map[ga.group_id].title,
+         "review_status": ga.review_status, "created_at": ga.created_at}
+        for ga in group_analyses if ga.group_id in groups_map and (demo or not any(
+            m.article is not None and m.article.is_demo for m in groups_map[ga.group_id].members))]
 
     counts = {"favorable": 0, "critico": 0, "neutral": 0, "opuesto": 0}
     items = []
@@ -479,6 +521,7 @@ def sentiment_dashboard(
                     "title": grp.title,
                     "media_list": media_list,
                     "flags": flags,
+                    "review_status": ga.review_status,
                 })
 
         for t in tones:
@@ -510,6 +553,7 @@ def sentiment_dashboard(
                 "valoracion": val,
                 "fragmento": t.get("fragmento", ""),
                 "is_opposed": is_opposed,
+                "review_status": ga.review_status,
             }
 
             if valoracion:
@@ -539,6 +583,10 @@ def sentiment_dashboard(
             "media_options": media_options,
             "sel_valoracion": valoracion,
             "sel_media": media,
+            "sel_revision": revision,
+            "review_list": review_list,
+            "review_labels": {"pendiente": "Sin revisar", "confirmada": "Confirmadas",
+                              "rechazada": "Rechazadas"},
             "nav": "sentimiento",
         },
         user=user,

@@ -23,9 +23,9 @@
   {% if a.subtitle %}<p class="lead">{{ a.subtitle }}</p>{% endif %}
   <p class="small">
     {% if a.author %}
-      <span class="badge badge-author-has">✍️ Nota firmada: Por {{ a.author }}</span>
+      <span class="badge badge-author-has">Nota firmada: Por {{ a.author }}</span>
     {% else %}
-      <span class="badge badge-author-none">⚪ Sin firma individual (publicada por la redacción o agencia)</span>
+      <span class="badge badge-author-none">Sin firma individual (publicada por la redacción o agencia)</span>
     {% endif %}
   </p>
   {% if not a.is_demo and (a.url.startswith('https://') or a.url.startswith('http://')) %}

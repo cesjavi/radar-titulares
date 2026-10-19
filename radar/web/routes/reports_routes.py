@@ -17,6 +17,7 @@ from radar.timeutil import to_local, utcnow
 from radar.web.deps import (
     demo_visible,
     get_db,
+    is_public,
     render,
     require_admin,
     require_user,
@@ -66,7 +67,8 @@ def _build(request: Request, db: Session, desde: str, hasta: str, medio: str):
     first, last = _parse_period(desde, hasta)
     media = _find_media(_media_options(db, request), medio)
     since, until = reports.period_from_dates(first, last)
-    data = reports.build(db, since, until, media, include_demo=demo_visible(request))
+    data = reports.build(db, since, until, media, include_demo=demo_visible(request),
+                         public=is_public(request))
     return first, last, media, data
 
 

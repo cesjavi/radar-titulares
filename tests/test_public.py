@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,7 +12,16 @@ from sqlalchemy import select
 from radar.alerts.engine import set_status, update_alerts
 from radar.analysis.engine import run_analysis
 from radar.config import get_settings
-from radar.models import AiAnalysis, Alert, ArticleRelation, StoryGroup, Subsource, User
+from radar.models import (
+    AiAnalysis,
+    AiGroupAnalysis,
+    Alert,
+    ArticleRelation,
+    StoryGroup,
+    Subsource,
+    User,
+)
+from radar.timeutil import utcnow
 from tests.conftest import csrf_from, login
 from tests.test_analysis import add, media, seed_story  # noqa: F401
 
@@ -144,3 +154,111 @@ def test_visitor_rate_limit(monkeypatch, db):
         codes = [visitor.get("/salud").status_code for _ in range(4)]
         assert codes == [200, 200, 200, 429]
         assert visitor.get("/static/css/app.css").status_code == 200  # estáticos exentos
+
+
+def _group_ai(db, group, sujeto):
+    from tests.test_ai import group_output
+
+    arts = [m.article for m in group.members if m.status == "activo"]
+    tones = [{"articulo": chr(65 + i), "sujeto": sujeto, "valoracion": "critico", "fragmento": ""}
+             for i in range(len(arts))]
+    row = AiGroupAnalysis(cache_key=sujeto, group_id=group.id,
+                          article_ids=json.dumps([a.id for a in arts]), provider="fake",
+                          model="modelo-x", prompt_version="v", status="ok",
+                          result=json.dumps(group_output(arts, tono_por_nota=tones)), flags="[]")
+    db.add(row)
+    db.commit()
+    return row
+
+
+def test_group_ai_reading_public_only_after_review(monkeypatch, db, story, admin):
+    group = db.scalar(select(StoryGroup))
+    ai = _group_ai(db, group, "sujeto-sintetico")
+    with public_client(monkeypatch) as visitor:
+        staff = TestClient(visitor.app)
+        login(staff)
+        # Pendiente: el usuario la ve, el visitante no.
+        assert "sujeto-sintetico" in staff.get("/sentimiento").text
+        assert "sujeto-sintetico" not in visitor.get("/sentimiento").text
+        assert "modelo-x" not in visitor.get(f"/grupos/{group.id}").text
+
+        token = csrf_from(visitor.get("/login").text)
+        r = visitor.post(f"/grupos/{group.id}/ia/{ai.id}/revisar",
+                         data={"csrf_token": token, "decision": "confirmada"}, follow_redirects=False)
+        assert r.status_code in (303, 401, 403)
+        db.expire_all()
+        assert db.get(AiGroupAnalysis, ai.id).review_status == "pendiente"
+
+        def review(decision):
+            token = csrf_from(staff.get(f"/grupos/{group.id}").text)
+            r = staff.post(f"/grupos/{group.id}/ia/{ai.id}/revisar",
+                           data={"csrf_token": token, "decision": decision}, follow_redirects=False)
+            assert r.status_code == 303
+
+        review("confirmada")
+        assert "sujeto-sintetico" in visitor.get("/sentimiento").text
+        assert "modelo-x" in visitor.get(f"/grupos/{group.id}").text
+
+        # Rechazada: no cuenta para nadie (el detalle del grupo la sigue mostrando al usuario).
+        review("rechazada")
+        assert "sujeto-sintetico" not in staff.get("/sentimiento").text
+        assert "sujeto-sintetico" not in visitor.get("/sentimiento").text
+        assert "Revisión: rechazada" in staff.get(f"/grupos/{group.id}").text
+
+        # Un grupo oculto no aparece en Sentimiento aunque esté confirmado.
+        review("confirmada")
+        db.expire_all()
+        db.get(StoryGroup, group.id).hidden_at = utcnow()
+        db.commit()
+        assert "sujeto-sintetico" not in staff.get("/sentimiento").text
+
+
+def test_summary_wording_and_stale_data_notice(monkeypatch, db, story):
+    with public_client(monkeypatch, RADAR_PUBLIC_ALERTS="todas") as visitor:
+        body = visitor.get("/").text
+        assert "coordinadas" not in body and "coordinados" not in body
+        # Con «todas» se ven alertas pendientes: el título no puede decir que están revisadas.
+        assert "Alertas recientes" in body and "Alertas revisadas" not in body
+        assert "Todavía no hubo ninguna recolección exitosa" in body
+
+        sub = db.scalar(select(Subsource))
+        sub.last_success_at = utcnow() - timedelta(hours=7)
+        db.commit()
+        assert "hace más de 6 horas que no entran notas nuevas" in visitor.get("/").text
+        sub.last_success_at = utcnow()
+        db.commit()
+        assert "no entran notas nuevas" not in visitor.get("/").text
+
+
+def test_summary_differs_for_visitors_and_team(monkeypatch, db, story, admin):
+    with public_client(monkeypatch) as visitor:
+        body = visitor.get("/?orden=interes&limite=24").text
+        assert "Hoy en los medios" in body and "Cómo leer este radar" in body
+        # Sin filtros ni pendientes internos para el visitante (los parámetros se ignoran).
+        assert "Ordenar por:" not in body and "Para hacer" not in body
+        # Las notas del grupo se acaban de detectar: hay barras en la actividad por hora.
+        assert 'class="activity-bar"' in body
+        staff = TestClient(visitor.app)
+        login(staff)
+        body = staff.get("/").text
+        assert "Para hacer" in body and "Ordenar por:" in body
+        assert "Cómo leer este radar" not in body
+        assert "alerta" in body.split("Para hacer", 1)[1].split("</section>", 1)[0]
+
+
+def test_sentiment_review_filter(monkeypatch, db, story, admin):
+    group = db.scalar(select(StoryGroup))
+    ai = _group_ai(db, group, "sujeto-sintetico")
+    with public_client(monkeypatch) as visitor:
+        staff = TestClient(visitor.app)
+        login(staff)
+        body = staff.get("/sentimiento?revision=pendiente").text
+        assert "Lecturas por grupo" in body and f'/grupos/{group.id}#ia' in body
+        assert "sujeto-sintetico" not in staff.get("/sentimiento?revision=confirmada").text
+        # Un visitante no puede usar el filtro para ver lo que no está confirmado.
+        body = visitor.get("/sentimiento?revision=pendiente").text
+        assert "sujeto-sintetico" not in body and "Lecturas por grupo" not in body
+        ai.review_status = "rechazada"
+        db.commit()
+        assert "sujeto-sintetico" not in staff.get("/sentimiento").text
+        assert "sujeto-sintetico" in staff.get("/sentimiento?revision=rechazada").text
