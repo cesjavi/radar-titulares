@@ -139,19 +139,29 @@ class AgendaPair:
 
 
 def agenda_metrics(db: Session, include_demo: bool = False, weeks: int = AGENDA_WEEKS,
-                   now: datetime | None = None) -> dict:
+                   now: datetime | None = None, since: datetime | None = None,
+                   until: datetime | None = None) -> dict:
     """Agenda compartida por pares de medios, por semana y en total.
 
     Una historia es un grupo abierto o, si la nota no está en ninguno, la nota sola. Para dos
     medios, Jaccard = historias que cubren los dos / historias que cubre alguno. Las réplicas
     (agencias) no cuentan: no son cobertura propia del medio.
+
+    Con `since` y `until` (UTC) se miran solo las notas detectadas en ese lapso, agrupadas en
+    las semanas que lo cubren (la primera y la última pueden quedar parciales).
     """
-    now = now or utcnow()
-    first_week = _week_start(now) - timedelta(weeks=weeks - 1)
-    # Margen de un día en UTC para no perder notas del lunes temprano en Buenos Aires.
-    since = first_week - timedelta(days=1)
+    if since is not None and until is not None:
+        first_week = _week_start(since)
+        weeks = (_week_start(until - timedelta(microseconds=1)) - first_week).days // 7 + 1
+    else:
+        now = now or utcnow()
+        first_week = _week_start(now) - timedelta(weeks=weeks - 1)
+        # Margen de un día en UTC para no perder notas del lunes temprano en Buenos Aires.
+        since, until = first_week - timedelta(days=1), None
     stmt = (select(Article.id, Article.media_id, Article.first_seen_at)
             .where(Article.first_seen_at >= since, Article.is_syndicated.is_(False)))
+    if until is not None:
+        stmt = stmt.where(Article.first_seen_at < until)
     if not include_demo:
         stmt = stmt.where(Article.is_demo.is_(False))
     arts = [(aid, mid, _week_start(seen)) for aid, mid, seen in db.execute(stmt)]

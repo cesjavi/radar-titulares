@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from urllib.parse import urlsplit
 
 from sqlalchemy import (
@@ -355,6 +355,31 @@ class RelationLabel(Base):
     score: Mapped[float | None] = mapped_column(Float)
     algorithm_version: Mapped[str] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class SavedReport(Base):
+    """Informe de un período guardado tal como se generó (JSON con todas sus secciones).
+
+    Es una foto: no se recalcula al reprocesar ni se ve afectado por la retención, así que
+    puede mostrar grupos o notas que ya no existen.
+    """
+
+    __tablename__ = "saved_reports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    period_start: Mapped[datetime] = mapped_column(DateTime)  # UTC, inclusive
+    period_end: Mapped[datetime] = mapped_column(DateTime)  # UTC, exclusivo
+    media_slug: Mapped[str | None] = mapped_column(String(64))  # filtro por medio, si hubo
+    data: Mapped[str] = mapped_column(Text)  # JSON
+    algorithm_version: Mapped[str] = mapped_column(String(32))
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    @property
+    def last_moment(self) -> datetime:
+        """Último instante incluido (para mostrar el día final del período)."""
+        return self.period_end - timedelta(microseconds=1)
 
 
 class Topic(Base):

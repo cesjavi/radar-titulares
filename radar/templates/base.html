@@ -40,7 +40,7 @@
 
       <div class="nav-secondary">
         <div class="nav-dropdown">
-          <button class="nav-dropdown-btn {{ 'active' if nav in ('cronologia', 'redes', 'revision', 'historial', 'metricas', 'fuentes', 'ejecuciones', 'configuracion') }}" type="button">
+          <button class="nav-dropdown-btn {{ 'active' if nav in ('cronologia', 'redes', 'revision', 'historial', 'metricas', 'informes', 'fuentes', 'ejecuciones', 'configuracion') }}" type="button">
             Herramientas ▾
           </button>
           <div class="nav-dropdown-menu">
@@ -51,6 +51,7 @@
             <a href="/historial" class="{{ 'active' if nav == 'historial' }}">📜 Historial</a>
             {% endif %}
             <a href="/metricas" class="{{ 'active' if nav == 'metricas' }}">📈 Métricas</a>
+            <a href="/informes" class="{{ 'active' if nav == 'informes' }}">📑 Informes</a>
             {% if user.can_analyze %}<a href="/evaluacion" class="{{ 'active' if nav == 'evaluacion' }}">🎯 Evaluación del motor</a>{% endif %}
             <a href="/fuentes" class="{{ 'active' if nav == 'fuentes' }}">🌐 Fuentes</a>
             {% if not user.is_anonymous %}<a href="/ejecuciones" class="{{ 'active' if nav == 'ejecuciones' }}">⚙️ Ejecuciones</a>{% endif %}

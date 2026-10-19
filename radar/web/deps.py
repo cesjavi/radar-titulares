@@ -40,7 +40,18 @@ def _fmt_pub(article, kind: str = "published") -> str:
     return "sin dato"
 
 
+def _fmt_iso(value: str | None, fmt: str = "%d/%m/%Y %H:%M") -> str:
+    """Fecha guardada como texto ISO (informes): con hora es UTC y se pasa a Buenos Aires; una
+    fecha sola ya es un día de Buenos Aires."""
+    if not value:
+        return "—"
+    if len(value) == 10:
+        return date.fromisoformat(value).strftime(fmt)
+    return _fmt_dt(datetime.fromisoformat(value), fmt)
+
+
 templates.env.filters["local_dt"] = _fmt_dt
+templates.env.filters["iso_dt"] = _fmt_iso
 templates.env.globals["fmt_pub"] = _fmt_pub
 
 

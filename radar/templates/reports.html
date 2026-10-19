@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}{{ report.title if report else 'Informes' }} · Radar de Titulares{% endblock %}
+{% block content %}
+{% set tone_labels = {'favorable': 'Favorable', 'critico': 'Crítico', 'neutral': 'Neutral', 'incierto': 'Incierto'} %}
+<div class="report">
+<h1>{% if report %}{{ report.title }}{% else %}📑 Informes{% endif %}</h1>
+<p class="muted">
+  Del {{ desde.strftime('%d/%m/%Y') }} al {{ hasta.strftime('%d/%m/%Y') }} (hora de Buenos Aires){% if data.media %} · solo <strong>{{ data.media.name }}</strong>{% else %} · todos los medios{% endif %}.
+  {% if report %}Guardado el {{ report.created_at | local_dt }}{% if author %} por {{ author }}{% endif %}: muestra los datos tal como estaban ese día.{% endif %}
+</p>
+
+{% if error %}<p class="alert alert-error">{{ error }}</p>{% endif %}
+
+<div class="no-print">
+{% if report %}
+  <p class="report-actions">
+    <a class="btn btn-ghost" href="/informes?{{ query }}">Ver con los datos actuales</a>
+    <button class="btn btn-ghost" type="button" data-print>Imprimir o guardar como PDF</button>
+    {% if user.is_admin %}
+    <form method="post" action="/informes/{{ report.id }}/borrar" class="inline" data-confirm="¿Borrar este informe guardado? No se puede deshacer.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-ghost" type="submit">Borrar</button>
+    </form>
+    {% endif %}
+  </p>
+{% else %}
+  <form method="get" action="/informes" class="filters-bar">
+    <label class="filter-item"><span class="filter-label">Desde</span><input type="date" name="desde" value="{{ desde.isoformat() }}" max="{{ today.isoformat() }}"></label>
+    <label class="filter-item"><span class="filter-label">Hasta</span><input type="date" name="hasta" value="{{ hasta.isoformat() }}" max="{{ today.isoformat() }}"></label>
+    <label class="filter-item"><span class="filter-label">Medio</span>
+      <select name="medio">
+        <option value="">Todos</option>
+        {% for m in media_options %}<option value="{{ m.slug }}" {{ 'selected' if medio == m.slug }}>{{ m.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="btn" type="submit">Ver informe</button>
+    <span class="small">
+      {% for n, start in shortcuts %}<a href="/informes?desde={{ start }}&hasta={{ today.isoformat() }}&medio={{ medio }}">Últimos {{ n }} días</a>{% if not loop.last %} · {% endif %}{% endfor %}
+    </span>
+  </form>
+  <p class="report-actions">
+    <button class="btn btn-ghost" type="button" data-print>Imprimir o guardar como PDF</button>
+  </p>
+  {% if user.is_admin %}
+  <form method="post" action="/informes/guardar" class="filters-bar">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="desde" value="{{ desde.isoformat() }}">
+    <input type="hidden" name="hasta" value="{{ hasta.isoformat() }}">
+    <input type="hidden" name="medio" value="{{ medio }}">
+    <label class="filter-item report-title-field"><span class="filter-label">Título</span><input type="text" name="titulo" maxlength="200" placeholder="{{ suggested_title }}"></label>
+    <button class="btn" type="submit">Guardar este informe</button>
+    <span class="small muted">Guarda una foto: no cambia aunque después se reprocesen los datos.</span>
+  </form>
+  {% endif %}
+{% endif %}
+</div>
+
+<section class="card">
+  <p class="small"><strong>Lectura del informe.</strong> Todo es descriptivo y se cuenta por la hora en que el radar detectó cada nota. Que dos notas coincidan quiere decir que comparten palabras, frases o nombres, no que transmitan el mismo mensaje. Cubrir lo mismo <strong>no</strong> indica coordinación (puede haber una fuente común o un hecho que todos cubren), y que un medio publique antes <strong>no</strong> indica que origine ni dirija nada. Las réplicas de agencias no cuentan como medio independiente.</p>
+</section>
+
+<div class="stats">
+  <div class="stat stat-primary"><span class="stat-value">{{ data.volume.total }}</span><span class="stat-label">Notas detectadas</span></div>
+  <div class="stat"><span class="stat-value">{{ data.groups.total }}</span><span class="stat-label">Grupos</span></div>
+  <div class="stat"><span class="stat-value">{{ data.groups.multi }}</span><span class="stat-label">Grupos con 2 o más medios independientes</span></div>
+  <div class="stat"><span class="stat-value">{{ data.tone.groups_analyzed }}</span><span class="stat-label">Grupos con análisis de IA</span></div>
+</div>
+
+{% macro csv_link(key) %}<a class="small no-print" href="{{ csv_base }}seccion={{ key }}">Descargar CSV</a>{% endmacro %}
+
+<section class="card" id="volumen">
+  <div class="card-head"><h2>1. Volumen</h2>{{ csv_link('volumen') }}</div>
+  {% if data.volume.media %}
+  <table class="table compact">
+    <thead><tr><th>Medio</th><th class="num">Notas propias</th><th class="num">Réplicas de agencia</th></tr></thead>
+    <tbody>{% for m in data.volume.media %}<tr><td>{{ m.name }}</td><td class="num">{{ m.own }}</td><td class="num">{{ m.syndicated }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% set day_max = data.volume.days | map(attribute='total') | max %}
+  <details {{ 'open' if data.volume.days | length <= 31 }}>
+    <summary>Por día</summary>
+    <p class="small">{{ csv_link('volumen-diario') }}</p>
+    <table class="table compact">
+      <thead><tr><th>Día</th>{% for m in data.volume.media %}<th class="num">{{ m.name }}</th>{% endfor %}<th class="num">Total</th><th class="bar-col"></th></tr></thead>
+      <tbody>
+      {% for d in data.volume.days %}
+        <tr><td class="nowrap">{{ d.day | iso_dt('%d/%m') }}</td>{% for n in d.counts %}<td class="num">{{ n }}</td>{% endfor %}<td class="num"><strong>{{ d.total }}</strong></td>
+          <td class="bar-col"><svg class="bar" viewBox="0 0 100 10" preserveAspectRatio="none" aria-hidden="true"><rect width="{{ (100 * d.total / day_max) if day_max else 0 }}" height="10"></rect></svg></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="small muted">Un día sin notas puede ser un hueco de recolección, no un día sin noticias (ver Ejecuciones).</p>
+  </details>
+  {% else %}<p class="muted">No hay notas detectadas en el período.</p>{% endif %}
+</section>
+
+<section class="card" id="grupos">
+  <div class="card-head"><h2>2. Grupos principales</h2>{{ csv_link('grupos') }}</div>
+  <p class="small muted">Los {{ data.groups.top | length }} grupos del período con más medios independientes (de {{ data.groups.total }}). No incluye los grupos ocultos.{% if data.media %} Solo grupos donde aparece {{ data.media.name }}.{% endif %}</p>
+  {% if data.groups.top %}
+  <table class="table responsive">
+    <thead><tr><th>Grupo</th><th class="num">Medios indep.</th><th class="num">Notas</th><th>Medios</th><th>Primera detección</th></tr></thead>
+    <tbody>
+    {% for g in data.groups.top %}
+      <tr>
+        <td data-label="Grupo"><a href="/grupos/{{ g.id }}">{{ g.title }}</a></td>
+        <td data-label="Medios indep." class="num">{{ g.independent }}</td>
+        <td data-label="Notas" class="num">{{ g.articles }}</td>
+        <td data-label="Medios" class="small">{{ g.media | join(', ') }}{% if g.syndicated_media %} <span class="muted">(réplica en {{ g.syndicated_media | join(', ') }})</span>{% endif %}</td>
+        <td data-label="Detección" class="small nowrap">{{ g.first_seen | iso_dt }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">No hay grupos en el período.</p>{% endif %}
+</section>
+
+<section class="card" id="agenda">
+  <div class="card-head"><h2>3. Agenda compartida</h2>{{ csv_link('agenda') }}</div>
+  <p class="small muted">Historias en común sobre historias que cubre alguno de los dos medios (índice de Jaccard). Una historia es un grupo o, si la nota no coincidió con nada, la nota sola. Sin réplicas de agencias.</p>
+  {% if data.agenda.pairs %}
+  <table class="table responsive">
+    <thead><tr><th>Par</th><th>Período</th>{% for w in data.agenda.weeks %}<th class="num small">Sem. {{ w | iso_dt('%d/%m') }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for p in data.agenda.pairs %}
+      <tr>
+        <td data-label="Par">{{ p.a }} / {{ p.b }}</td>
+        <td data-label="Período" class="num">{% if p.jaccard is not none %}{{ '%.1f' | format(p.jaccard * 100) }} % <span class="small muted">({{ p.shared }} de {{ p.union }})</span>{% else %}—{% endif %}</td>
+        {% for wk in p.weekly %}
+        <td data-label="Sem. {{ data.agenda.weeks[loop.index0] | iso_dt('%d/%m') }}" class="num small">{% if wk and wk[1] %}{{ '%.0f' | format(100 * wk[0] / wk[1]) }} %<div class="muted">{{ wk[0] }}</div>{% else %}<span class="muted" title="Alguno de los dos medios no tiene notas esa semana">—</span>{% endif %}</td>
+        {% endfor %}
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="small muted">Las semanas empiezan el lunes; la primera y la última pueden estar incompletas si el período no empieza un lunes o no termina un domingo. «—»: alguno de los dos medios no tiene notas esa semana.</p>
+  {% endif %}
+  {% if data.agenda.exclusive %}
+  <h3>Cobertura sin coincidencia en otro medio</h3>
+  <table class="table compact">
+    <thead><tr><th>Medio</th><th class="num">Notas propias</th><th class="num">Con coincidencia en otro medio</th><th class="num">Sin coincidencia detectada</th></tr></thead>
+    <tbody>{% for e in data.agenda.exclusive %}<tr><td>{{ e.name }}</td><td class="num">{{ e.notes }}</td><td class="num">{{ e.shared }}</td><td class="num">{{ e.alone }}{% if e.notes %} <span class="small muted">({{ '%.0f' | format(100 * e.alone / e.notes) }} %)</span>{% endif %}</td></tr>{% endfor %}</tbody>
+  </table>
+  <p class="small muted">«Sin coincidencia detectada» incluye lo que cubrió solo ese medio y lo que el motor léxico no llegó a relacionar.</p>
+  {% elif not data.agenda.pairs %}<p class="muted">Sin datos para el período.</p>{% endif %}
+</section>
+
+<section class="card" id="titulares">
+  <div class="card-head"><h2>4. Cambios de titular</h2>{{ csv_link('titulares') }}</div>
+  <p class="small muted">Notas del período cuyo titular o bajada cambió en el feed del medio. Describe qué cambió, no por qué ni si la versión anterior estaba mal.</p>
+  {% if data.headlines.media %}
+  <table class="table responsive">
+    <thead><tr><th>Medio</th><th class="num">Notas</th><th class="num">Con cambios</th><th class="num">Cambios</th><th class="num">Mediana hasta el 1.er cambio</th><th>Qué cambió</th></tr></thead>
+    <tbody>
+    {% for m in data.headlines.media %}
+      <tr>
+        <td data-label="Medio">{{ m.name }}</td>
+        <td data-label="Notas" class="num">{{ m.articles }}</td>
+        <td data-label="Con cambios" class="num">{{ m.changed }}{% if m.changed_pct is not none %} <span class="small muted">({{ '%.1f' | format(m.changed_pct) }} %)</span>{% endif %}</td>
+        <td data-label="Cambios" class="num">{{ m.changes }}</td>
+        <td data-label="Mediana" class="num">{% if m.median_first_change_min is not none %}{{ m.median_first_change_min }} min{% else %}—{% endif %}</td>
+        <td data-label="Qué cambió" class="small">{% for key, label in data.headlines.categories.items() if m.by_category.get(key) %}{{ label }}: {{ m.by_category[key] }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="small muted">Un cambio puede entrar en varias categorías.</p>
+  {% else %}<p class="muted">Sin notas en el período.</p>{% endif %}
+</section>
+
+<section class="card" id="temas">
+  <div class="card-head"><h2>5. Temas</h2>{{ csv_link('temas') }}</div>
+  <p class="small muted">Notas que coinciden con las palabras clave de cada tema de seguimiento, comparadas con el período anterior de igual largo. Más notas es más volumen, no una explicación de por qué.</p>
+  {% if data.topics['items'] %}
+  <table class="table responsive">
+    <thead><tr><th>Tema</th><th class="num">Notas</th><th class="num">Período anterior</th><th class="num">Medios indep.</th><th>Por medio</th></tr></thead>
+    <tbody>
+    {% for t in data.topics['items'] %}
+      {% set diff = t.count - t.previous %}
+      <tr>
+        <td data-label="Tema">{{ t.name }}</td>
+        <td data-label="Notas" class="num">{{ t.count }}</td>
+        <td data-label="Anterior" class="num">{{ t.previous }} <span class="small muted">({{ '+' if diff > 0 }}{{ diff }})</span></td>
+        <td data-label="Medios indep." class="num">{{ t.independent_media }}</td>
+        <td data-label="Por medio" class="small">{% for name, n in t.by_media.items() %}{{ name }}: {{ n }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if data.topics.omitted %}<p class="small muted">Y {{ data.topics.omitted }} tema(s) más con menos notas (incluidos en el CSV solo los mostrados).</p>{% endif %}
+  {% else %}<p class="muted">Ningún tema de seguimiento tuvo notas en el período.</p>{% endif %}
+</section>
+
+<section class="card" id="revisiones">
+  <div class="card-head"><h2>6. Revisiones y alertas</h2></div>
+  <p class="small muted">Lo que se hizo en el período{% if data.media %}, en todo el radar (no solo {{ data.media.name }}){% endif %}. La revisión humana es la decisión final sobre cada relación.</p>
+  {% set rv = data.reviews %}
+  <div class="grid-2">
+    <div>
+      <h3>Revisión humana</h3>
+      <ul class="compact-list">
+        <li>Relaciones confirmadas: <strong>{{ rv.relations.get('confirmada', 0) }}</strong></li>
+        <li>Relaciones rechazadas: <strong>{{ rv.relations.get('rechazada', 0) }}</strong></li>
+        <li>Etiquetas para medir el motor: <strong>{{ rv.labels }}</strong></li>
+        {% for r in rv.manual %}<li class="small">{{ r.target }} · {{ r.decision }}: {{ r.count }}</li>{% endfor %}
+      </ul>
+    </div>
+    <div>
+      <h3>Alertas creadas</h3>
+      <ul class="compact-list">
+        {% for p in ('alta', 'media', 'baja') %}<li>Prioridad {{ p }}: <strong>{{ rv.alerts_by_priority.get(p, 0) }}</strong></li>{% endfor %}
+        <li class="small muted">Estado actual: {% for s, n in rv.alerts_by_status.items() %}{{ s }} {{ n }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</li>
+      </ul>
+      <p class="small muted">La prioridad indica qué revisar primero; no implica falsedad ni coordinación.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card" id="tono">
+  <div class="card-head"><h2>7. Tono según la IA</h2>{{ csv_link('tono') }}</div>
+  <p class="small muted"><strong>Lectura automática, sin verificar.</strong> Valoración de cada nota hacia el sujeto central según el último análisis de IA de cada grupo. Cubre {{ data.tone.groups_analyzed }} de {{ data.tone.groups_total }} grupos del período: solo los que alguien mandó a analizar, así que no es una muestra representativa. No prueba sesgo, intención ni coordinación; la revisión humana tiene la última palabra.</p>
+  {% if data.tone.by_media %}
+  <table class="table compact">
+    <thead><tr><th>Medio</th>{% for v, label in tone_labels.items() %}<th class="num">{{ label }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for m in data.tone.by_media %}<tr><td>{{ m.name }}</td>{% for v in tone_labels %}<td class="num {{ 'text-' ~ v if v != 'incierto' }}">{{ m[v] }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+  </table>
+  {% if data.tone.opposed %}
+  <h3>Grupos con enfoques opuestos según la IA</h3>
+  <ul class="compact-list">{% for g in data.tone.opposed %}<li><span class="badge badge-sentiment-opuesto">para revisar</span> <a href="/grupos/{{ g.id }}">{{ g.title or ('Grupo ' ~ g.id) }}</a></li>{% endfor %}</ul>
+  {% endif %}
+  {% else %}<p class="muted">Ningún grupo del período tiene análisis de IA.</p>{% endif %}
+</section>
+
+<p class="small muted">Generado el {{ data.generated_at | iso_dt }} · versión del motor léxico {{ data.algorithm_version }}{% if report %} · los enlaces a grupos pueden no existir más si se reprocesaron o vencieron por retención{% endif %}.</p>
+
+{% if saved %}
+<section class="card no-print" id="guardados">
+  <h2>Informes guardados</h2>
+  <table class="table responsive">
+    <thead><tr><th>Título</th><th>Período</th><th>Guardado</th></tr></thead>
+    <tbody>
+    {% for r in saved %}
+      <tr>
+        <td data-label="Título"><a href="/informes/{{ r.id }}">{{ r.title }}</a></td>
+        <td data-label="Período" class="small nowrap">{{ r.period_start | local_dt('%d/%m/%Y') }} – {{ r.last_moment | local_dt('%d/%m/%Y') }}</td>
+        <td data-label="Guardado" class="small nowrap">{{ r.created_at | local_dt }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+</div>
+{% endblock %}

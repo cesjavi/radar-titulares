@@ -687,3 +687,21 @@ input[type=checkbox] { width: auto; cursor: pointer; }
 .filter-label { font-weight: 600; color: var(--text-secondary); }
 .filter-label-main { font-weight: 700; color: var(--text); }
 .filter-reset { margin-left: auto; }
+
+/* Informes */
+.report-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.report-title-field { flex: 1 1 280px; }
+.report-title-field input { width: 100%; }
+.report details summary { cursor: pointer; font-weight: 600; margin: 12px 0 4px; }
+.bar-col { width: 30%; min-width: 80px; }
+.bar { display: block; width: 100%; height: 10px; }
+.bar rect { fill: var(--accent); }
+
+@media print {
+  body { background: #fff; color: #000; }
+  .topbar, .footer, .demo-banner, .public-banner, .no-print { display: none !important; }
+  .card { box-shadow: none; break-inside: avoid; }
+  .report details > summary { display: none; }
+  .report details:not([open]) > * { display: revert; }
+  a { color: inherit; text-decoration: none; }
+}

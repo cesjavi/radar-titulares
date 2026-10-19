@@ -349,7 +349,7 @@ Con `RADAR_PUBLIC_MODE=true`, cualquiera puede ver el panel **en modo de solo le
 
 | Visible para visitantes | Solo con login |
 |---|---|
-| Resumen, Noticias (lista y ficha), Grupos y comparación lado a lado, Cronología, Métricas, Fuentes (sin mensajes de error) | Revisión, Historial, Ejecuciones, Configuración y **todas** las acciones (confirmar, separar, unir, pausar…) |
+| Resumen, Noticias (lista y ficha), Grupos y comparación lado a lado, Cronología, Métricas, Informes del período (sin los guardados), Fuentes (sin mensajes de error) | Revisión, Historial, Ejecuciones, Configuración, informes guardados y **todas** las acciones (confirmar, separar, unir, pausar…) |
 | Alertas según `RADAR_PUBLIC_ALERTS`: `revisadas` (por defecto), `todas` (incluye pendientes) o `ninguna` | Notas de revisión, historiales de alertas y correcciones, análisis de IA de relaciones no confirmadas |
 
 - **Datos DEMO:** los visitantes nunca los ven, aunque `RADAR_DEMO_MODE` esté activo.
@@ -369,6 +369,7 @@ Con `RADAR_PUBLIC_MODE=true`, cualquiera puede ver el panel **en modo de solo le
 | Revisión (`/revision`) | Cola de alertas pendientes y relaciones sin revisar |
 | Historial (`/historial`) | Titulares modificados por los medios, eventos de alertas y correcciones manuales |
 | Métricas (`/metricas`) | Secuencias entre medios: casos, precisión temporal y cobertura |
+| Informes (`/informes`) | Informe de un período y, opcionalmente, un medio: volumen, grupos principales, agenda compartida, cambios de titular, temas, revisiones y alertas, y tono según la IA. CSV por sección, versión para imprimir/PDF e informes guardados como foto |
 | Fuentes y Ejecuciones | Estado operativo de cada fuente; ejecuciones y errores con filtros |
 | Configuración | Temas, secciones prioritarias, reglas de alertas, Telegram (estado) y contraseña |
 

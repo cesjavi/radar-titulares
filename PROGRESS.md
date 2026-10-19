@@ -372,6 +372,13 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - `/api/cron?media=` valida contra los medios de la base, no contra los adaptadores del código: antes rechazaba La Política Online (dada de alta en el panel), que por eso nunca se recolectaba sola.
 - Estimación (no medida): ~30 CU-horas por mes en Neon de 100; el espacio puede crecer más rápido por las notas de Infobae que antes se perdían.
 
+### Agregado: informes por período (2026-10-18)
+- `radar/reports.py` + `/informes` (Herramientas → Informes): período a elección (días de Buenos Aires, hasta 180) y medio opcional. Siete secciones: volumen por medio y por día (réplicas aparte), grupos principales (por medios independientes, sin ocultos), agenda compartida, cambios de titular, temas (contra el período anterior de igual largo), revisiones y alertas (de todo el radar aunque se filtre un medio) y tono según la IA (último análisis válido de cada grupo; se aclara que cubre solo los grupos analizados).
+- Todo se cuenta por detección (`first_seen_at`). `agenda_metrics` y `change_stats` aceptan `since`/`until`: el informe usa las mismas fórmulas que Métricas e Historial.
+- Exportación: CSV por sección (`;` y BOM para Excel en español; las celdas que empiezan con `=`, `+`, `-` o `@` llevan apóstrofo) y versión para imprimir o guardar como PDF desde el navegador (CSS `@media print`, sin dependencias).
+- Informes guardados (migración `0015`, tabla `saved_reports`): una foto en JSON, solo administradores la crean o borran; cualquier usuario con login la ve. No se recalcula al reprocesar ni le afecta la retención, así que sus enlaces a grupos pueden quedar rotos.
+- Con una copia de la base local (1863 notas, 65 grupos): 0,1–0,15 s para 7, 30 y 90 días en SQLite. Sin medir contra Neon; por las consultas de agenda y titulares (~3,5 s cada una ahí) puede tardar varios segundos.
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.

@@ -16,6 +16,11 @@
     if (msg && !window.confirm(msg)) ev.preventDefault();
   }, true);
 
+  // <button data-print>: imprime la página (o la guarda como PDF desde el diálogo del navegador).
+  document.addEventListener("click", function (ev) {
+    if (ev.target.closest && ev.target.closest("[data-print]")) window.print();
+  });
+
   // <a data-click-id="N">: registra que se abrió la nota original (señal de interés para el
   // orden del resumen). No demora la navegación: el pedido sigue aunque se cierre la página.
   document.addEventListener("click", function (ev) {

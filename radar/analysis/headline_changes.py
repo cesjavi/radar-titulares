@@ -113,10 +113,15 @@ def transitions(versions: list[HeadlineVersion]) -> dict[int, list[str]]:
 
 
 def change_stats(db: Session, days: int = 30, include_demo: bool = False,
-                 now: datetime | None = None) -> dict:
-    """Cambios por medio en las notas detectadas en los últimos `days` días."""
-    since = (now or utcnow()) - timedelta(days=days)
+                 now: datetime | None = None, since: datetime | None = None,
+                 until: datetime | None = None) -> dict:
+    """Cambios por medio en las notas detectadas en los últimos `days` días o, con `since` y
+    `until` (UTC), en las detectadas en ese lapso."""
+    if since is None:
+        since = (now or utcnow()) - timedelta(days=days)
     art_filter = [Article.first_seen_at >= since]
+    if until is not None:
+        art_filter.append(Article.first_seen_at < until)
     if not include_demo:
         art_filter.append(Article.is_demo.is_(False))
     names = dict(db.execute(select(Media.id, Media.name)).all())
