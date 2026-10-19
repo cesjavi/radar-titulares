@@ -7,6 +7,11 @@
 <section class="card" id="agenda">
   <h2>Agenda compartida</h2>
   <p class="small muted">Qué parte de sus historias cubren dos medios a la vez: historias en común sobre historias que cubre alguno de los dos (índice de Jaccard). Una historia es un grupo del radar o, si la nota no coincidió con nada, la nota sola. No incluye notas republicadas de agencias. Cubrir lo mismo <strong>no</strong> indica coordinación: puede haber una fuente común o un hecho que todos cubren.</p>
+  <div class="heat-legend small" aria-label="Escala de colores">
+    <span class="muted">Historias en común por semana:</span>
+    <span class="heat-1">menos de 1 %</span><span class="heat-2">1–2 %</span><span class="heat-3">2–4 %</span><span class="heat-4">4–8 %</span><span class="heat-5">8 % o más</span>
+    <span class="heat-3 heat-few">menos de 5 en común</span>
+  </div>
   <table class="table responsive">
     <thead><tr><th>Par</th><th>Últimas {{ agenda.weeks | length }} semanas</th>{% for w in agenda.weeks %}<th class="num small">{{ w.strftime('%d/%m') }}</th>{% endfor %}</tr></thead>
     <tbody>
@@ -14,21 +19,25 @@
       <tr>
         <td data-label="Par">{{ p.a }} / {{ p.b }}</td>
         <td data-label="Total" class="num">{% if p.jaccard is not none %}{{ '%.1f' | format(p.jaccard * 100) }} % <span class="small muted">({{ p.shared }} de {{ p.union }})</span>{% else %}—{% endif %}</td>
-        {% for wk in p.weekly %}
-        <td data-label="Semana del {{ agenda.weeks[loop.index0].strftime('%d/%m') }}" class="num small">{% if wk and wk[1] %}{{ '%.0f' | format(100 * wk[0] / wk[1]) }} %<div class="muted">{{ wk[0] }}</div>{% else %}<span class="muted" title="Alguno de los dos medios no tiene notas esa semana">—</span>{% endif %}</td>
+        {% for wk in p.weekly %}{% set week = agenda.weeks[loop.index0].strftime('%d/%m') %}
+        {% if wk and wk[1] %}{% set pct = 100 * wk[0] / wk[1] %}{% set bin = 1 if pct < 1 else 2 if pct < 2 else 3 if pct < 4 else 4 if pct < 8 else 5 %}
+        <td data-label="Semana del {{ week }}" class="num small heat-cell heat-{{ bin }}{{ ' heat-few' if wk[0] < 5 }}" title="Semana del {{ week }}: {{ wk[0] }} historias en común de {{ wk[1] }}{{ ' (pocas: el porcentaje varía mucho)' if wk[0] < 5 }}">{{ '%.0f' | format(pct) }} %<div class="muted">{{ wk[0] }}</div></td>
+        {% else %}
+        <td data-label="Semana del {{ week }}" class="num small"><span class="muted" title="Alguno de los dos medios no tiene notas esa semana">—</span></td>
+        {% endif %}
         {% endfor %}
       </tr>
     {% endfor %}
     </tbody>
   </table>
-  <p class="small muted">Cada semana empieza el lunes (hora de Buenos Aires). Debajo del porcentaje, la cantidad de historias en común: con pocas, el porcentaje varía mucho. «—»: alguno de los dos medios no tiene notas esa semana (sin recolección o dado de alta después); el total usa solo las semanas con los dos.</p>
+  <p class="small muted">Cada semana empieza el lunes (hora de Buenos Aires). Debajo del porcentaje, la cantidad de historias en común: con pocas, el porcentaje varía mucho (las semanas con menos de 5 historias en común van rayadas; cada tramo de color duplica al anterior). Más color no quiere decir más coordinación: dos medios grandes cubren muchas de las mismas noticias del día. «—»: alguno de los dos medios no tiene notas esa semana (sin recolección o dado de alta después); el total usa solo las semanas con los dos.</p>
 
   <h3>Cobertura sin coincidencia en otro medio</h3>
-  <table class="table compact">
+  <table class="table compact responsive">
     <thead><tr><th>Medio</th><th>Notas propias</th><th>Con coincidencia en otro medio</th><th>Sin coincidencia detectada</th></tr></thead>
     <tbody>
     {% for e in agenda.exclusive %}
-      <tr><td>{{ e.name }}</td><td class="num">{{ e.notes }}</td><td class="num">{{ e.shared }}</td><td class="num">{{ e.alone }}{% if e.notes %} <span class="small muted">({{ '%.0f' | format(100 * e.alone / e.notes) }} %)</span>{% endif %}</td></tr>
+      <tr><td data-label="Medio">{{ e.name }}</td><td data-label="Notas propias" class="num">{{ e.notes }}</td><td data-label="Con coincidencia" class="num">{{ e.shared }}</td><td data-label="Sin coincidencia" class="num">{{ e.alone }}{% if e.notes %} <span class="small muted">({{ '%.0f' | format(100 * e.alone / e.notes) }} %)</span>{% endif %}</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -63,9 +72,9 @@
 </section>
 <section class="card">
   <h2>Precisión de fechas por medio (notas en grupos)</h2>
-  <table class="table compact">
+  <table class="table compact responsive">
     <thead><tr><th>Medio</th><th>Fecha y hora</th><th>Solo fecha</th><th>Sin dato</th></tr></thead>
-    <tbody>{% for name, v in m.precision.items() %}<tr><td>{{ name }}</td><td class="num">{{ v.datetime }}</td><td class="num">{{ v.date }}</td><td class="num">{{ v.none }}</td></tr>{% endfor %}</tbody>
+    <tbody>{% for name, v in m.precision.items() %}<tr><td data-label="Medio">{{ name }}</td><td data-label="Fecha y hora" class="num">{{ v.datetime }}</td><td data-label="Solo fecha" class="num">{{ v.date }}</td><td data-label="Sin dato" class="num">{{ v.none }}</td></tr>{% endfor %}</tbody>
   </table>
 </section>
 {% else %}<p class="muted">Todavía no hay grupos con dos o más medios.</p>{% endif %}

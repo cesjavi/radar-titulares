@@ -71,7 +71,7 @@
     <ul class="todo-list">
       {% if todo.alerts %}<li><a href="/revision"><strong>{{ todo.alerts }}</strong> alerta{{ 's' if todo.alerts != 1 }} pendiente{{ 's' if todo.alerts != 1 }}</a></li>{% endif %}
       {% if todo.relations %}<li><a href="/revision"><strong>{{ todo.relations }}</strong> relaci{{ 'ones' if todo.relations != 1 else 'ón' }} para revisar</a></li>{% endif %}
-      {% if todo.ai %}<li><a href="/sentimiento"><strong>{{ todo.ai }}</strong> lectura{{ 's' if todo.ai != 1 }} de IA sin revisar</a> <span class="small muted">(no se ven en la vista pública)</span></li>{% endif %}
+      {% if todo.ai %}<li><a href="/sentimiento?revision=pendiente#revision"><strong>{{ todo.ai }}</strong> lectura{{ 's' if todo.ai != 1 }} de IA sin revisar</a> <span class="small muted">(no se ven en la vista pública)</span></li>{% endif %}
       {% if todo.failing %}<li class="todo-warn"><a href="/fuentes"><strong>{{ todo.failing }}</strong> fuente{{ 's' if todo.failing != 1 }} con fallas</a></li>{% endif %}
     </ul>
     {% else %}
@@ -96,7 +96,7 @@
   <section class="card card-featured" id="grupos-destacados-container">
     <div class="card-head">
       <div>
-        <h2>🎯 Historias en varios medios</h2>
+        <h2>Historias en varios medios</h2>
         <p class="small muted">
           Notas de distintos medios agrupadas por compartir términos, expresiones y entidades en sus titulares. Es una coincidencia de palabras: no dice qué medio publicó primero ni que se hayan puesto de acuerdo.
         </p>
@@ -158,10 +158,10 @@
         <div class="group-card-header">
           <div class="group-badges">
             <span class="badge badge-media-count" title="Medios independientes cubriendo la noticia">
-              🏛️ {{ g.independent_media_count }} medio{{ 's' if g.independent_media_count != 1 }}
+              {{ g.independent_media_count }} medio{{ 's' if g.independent_media_count != 1 }}
             </span>
             <span class="badge badge-notes-count">
-              📰 {{ g.article_count }} nota{{ 's' if g.article_count != 1 }}
+              {{ g.article_count }} nota{{ 's' if g.article_count != 1 }}
             </span>
             {% if sentiment_info %}
             <span class="badge badge-sentiment-{{ sentiment_info.tipo }}" title="Lectura de la IA{{ ' revisada por una persona' if public_view else ', sin verificar' }}">
@@ -237,7 +237,7 @@
   <!-- TEMAS EN ALZA Y ALERTAS -->
   <div class="grid-2">
     <section class="card" id="temas">
-      <h2>📈 Temas en alza</h2>
+      <h2>Temas en alza</h2>
       {% if trends and trends.rising %}
       <ul class="trend-list">
         {% for r in trends.rising %}
@@ -279,7 +279,7 @@
     {% else %}
     <section class="card card-sentiment-banner">
       <div class="card-head">
-        <h2>📊 Sentimiento y tono editorial</h2>
+        <h2>Sentimiento y tono editorial</h2>
         <span class="badge badge-sentiment-opuesto">IA</span>
       </div>
       <p class="small muted">
@@ -298,10 +298,10 @@
     </div>
     <div class="legend-bar small">
       <span class="legend-title">Autoría:</span>
-      <span class="badge badge-author-has">✍️ Con autor</span>
-      <span class="badge badge-author-none">⚪ Sin firma</span>
+      <span class="badge badge-author-has">Con autor</span>
+      <span class="badge badge-author-none">Sin firma</span>
       <span class="legend-title legend-gap">Popularidad:</span>
-      <span class="badge badge-clicks">👆 Contador de clicks</span>
+      <span class="badge badge-clicks">Contador de clicks</span>
     </div>
     {% if latest %}
     <table class="table responsive">
@@ -353,7 +353,7 @@
         {% endfor %}
         </tbody>
       </table>
-      {% if top_alerts %}<p class="small"><a href="/sentimiento">📊 Ver las lecturas de tono con IA{{ ' revisadas' if public_view }} →</a></p>{% endif %}
+      {% if top_alerts %}<p class="small"><a href="/sentimiento">Ver las lecturas de tono con IA{{ ' revisadas' if public_view }} →</a></p>{% endif %}
     </section>
   </div>
 </div>

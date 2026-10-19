@@ -21,7 +21,14 @@ from radar.social.collector import fetch_channel
 from radar.social import x_import
 from radar.social.match import LINK_LABELS, link_posts
 from radar.social.references import x_status_refs
-from radar.web.deps import get_db, render, require_admin, require_user, verify_csrf
+from radar.web.deps import (
+    demo_visible,
+    get_db,
+    render,
+    require_admin,
+    verify_csrf,
+    viewer,
+)
 
 router = APIRouter()
 
@@ -46,7 +53,8 @@ def _loads(raw: str | None) -> dict:
 
 @router.get("/redes")
 def social_page(request: Request, cuenta: str = "", vinculados: str = "",
-                db: Session = Depends(get_db), user: User = Depends(require_user)):
+                db: Session = Depends(get_db), user: User = Depends(viewer)):
+    """Lectura: con sesión o, si la vista pública está activa, para visitantes."""
     return _social_page(request, db, user, cuenta, vinculados)
 
 
@@ -65,11 +73,12 @@ def _social_page(request, db, user, cuenta="", vinculados="", status_code=200, *
     if vinculados:
         q = q.where(SocialPost.id.in_(select(PostArticleLink.post_id).where(
             PostArticleLink.review_status != "rechazada")))
+    demo = demo_visible(request)
     posts = []
     for p in db.scalars(q):
         links = []
         for link in sorted(p.article_links, key=lambda x: -x.score):
-            if link.review_status == "rechazada":
+            if link.review_status == "rechazada" or (link.article.is_demo and not demo):
                 continue
             ev = _loads(link.evidence)
             links.append({"link": link, "article": link.article, "label": LINK_LABELS.get(

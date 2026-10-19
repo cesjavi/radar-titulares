@@ -4,7 +4,7 @@
 <div class="sentiment-page">
   <div class="page-header">
     <div>
-      <h1 class="page-title">📊 Sentimiento y Tono Editorial</h1>
+      <h1 class="page-title">Sentimiento y Tono Editorial</h1>
       <p class="muted small">
         Análisis automatizado con IA del tono y enfoque de cada medio hacia los sujetos de las noticias agrupadas.
         Lectura sin verificar: no prueba sesgo, intencionalidad ni coordinación. La revisión humana tiene la última palabra.
@@ -16,19 +16,19 @@
   <div class="stats stats-sentiment">
     <div class="stat stat-sentiment-item">
       <span class="stat-value text-favorable">{{ counts.favorable }}</span>
-      <span class="stat-label">🟢 Tono Favorable</span>
+      <span class="stat-label">Tono Favorable</span>
     </div>
     <div class="stat stat-sentiment-item">
       <span class="stat-value text-critico">{{ counts.critico }}</span>
-      <span class="stat-label">🔴 Tono Crítico</span>
+      <span class="stat-label">Tono Crítico</span>
     </div>
     <div class="stat stat-sentiment-item">
       <span class="stat-value text-neutral">{{ counts.neutral }}</span>
-      <span class="stat-label">⚪ Tono Neutral</span>
+      <span class="stat-label">Tono Neutral</span>
     </div>
     <div class="stat stat-sentiment-item {{ 'stat-warn' if counts.opuesto > 0 }}">
       <span class="stat-value">{{ counts.opuesto }}</span>
-      <span class="stat-label">⚠️ Enfoques Opuestos</span>
+      <span class="stat-label">Enfoques Opuestos</span>
     </div>
   </div>
 
@@ -50,16 +50,49 @@
         {% endfor %}
       </select>
     </label>
+    {% if not public_view %}
+    <label>Revisión
+      <select name="revision">
+        <option value="">Todas menos las rechazadas</option>
+        {% for k, label in review_labels.items() %}
+        <option value="{{ k }}" {{ 'selected' if sel_revision == k }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endif %}
     <button type="submit" class="btn">Filtrar</button>
-    {% if sel_valoracion or sel_media %}
+    {% if sel_valoracion or sel_media or sel_revision %}
     <a href="/sentimiento" class="btn btn-ghost">Limpiar</a>
     {% endif %}
   </form>
 
+  {% if review_list %}
+  <section class="card" id="revision">
+    <div class="card-head">
+      <h2>Lecturas por grupo</h2>
+      <span class="small muted">{{ review_list | length }} grupo{{ 's' if review_list | length != 1 }}{% if sel_revision %} · {{ review_labels[sel_revision] | lower }}{% endif %}</span>
+    </div>
+    <p class="small muted">La vista pública solo muestra las confirmadas. Confirmar dice que la lectura del tono y el enfoque es razonable según las notas, no que alguna afirmación sea cierta.</p>
+    <table class="table responsive">
+      <thead><tr><th>Grupo</th><th>Analizado</th><th>Revisión</th><th></th></tr></thead>
+      <tbody>
+      {% for r in review_list %}
+        <tr>
+          <td data-label="Grupo"><a href="/grupos/{{ r.group_id }}">{{ r.title }}</a></td>
+          <td data-label="Analizado" class="nowrap small">{{ r.created_at | local_dt }}</td>
+          <td data-label="Revisión"><span class="badge review-{{ r.review_status }}">{{ r.review_status }}</span></td>
+          <td data-label="">{% if user and user.is_admin %}<a href="/grupos/{{ r.group_id }}#ia" class="small">{{ 'Revisar' if r.review_status == 'pendiente' else 'Ver' }} →</a>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
   {% if opposed_groups %}
   <section class="card card-accent-warn">
     <div class="card-head">
-      <h2>⚠️ Grupos con Enfoques Opuestos o Discrepancias Significativas</h2>
+      <h2>Grupos con Enfoques Opuestos o Discrepancias Significativas</h2>
       <span class="badge badge-opuesto">{{ opposed_groups | length }} caso{{ 's' if opposed_groups | length != 1 }}</span>
     </div>
     <p class="small muted">Grupos en los que la IA leyó enfoques contrapuestos o valoraciones opuestas entre las notas. Es una discrepancia para revisar: no dice qué medio tiene razón ni qué afirmación es cierta.</p>

@@ -38,6 +38,7 @@ app.py + vercel.json   punto de entrada y configuración para Vercel (VERCEL.md)
   social/      telegram.py (parser de t.me/s), collector.py, match.py (posteo ↔ nota)
   notify/      telegram.py          maintenance.py (backup/retención)       metrics.py (secuencias y agenda compartida)
   reports.py   informes por período (JSON guardable en saved_reports, CSV por sección)
+  graph.py     mapa de una historia (medios, notas, nombres, redes); lo dibuja static/js/graph.js
   web/         app.py, deps.py, routes/ (api_routes.py: API de la extensión de Chrome)      templates/      static/
 alembic/versions/   0001 … 0016        deploy/   systemd, nginx, scripts
 tests/              fixtures/ (sintéticos)

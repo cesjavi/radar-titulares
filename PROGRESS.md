@@ -406,6 +406,17 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - Corregido: `button.link` (Ocultar/Mostrar en la tabla de noticias, entre otros) no tenía estilos y se veía como botón del sistema. Va con `:where()` para no pisar `.logout-btn`.
 - Verificado con navegador sin interfaz sobre una copia de la base, como visitante y con un usuario de prueba creado solo en la copia: sin errores de consola, sin desborde a 390 px.
 
+### Agregado: mapa de la historia, redes públicas y ajustes visuales (2026-10-19)
+- Mapa de la historia en el detalle de cada grupo (`radar/graph.py` + `/grupos/<id>/grafo` + `static/js/graph.js`): medios, notas, nombres que aparecen en los titulares (entidades compartidas de las relaciones del grupo, hasta 8), cuentas y posteos vinculados (hasta 15), con tope de 60 nodos. **Línea** = palabras en común, quién publicó qué o quién nombra a quién; **flecha** solo con dirección explícita en los datos: enlace o mención entre notas (`referencia_explicita`, `desde`/`hacia`), cita a otro medio (`media_references`), posteo que enlaza la nota, reenvío (`forwarded_from`). El orden de las horas nunca dibuja una flecha. SVG con acomodo por fuerzas propio (sin librerías, compatible con la CSP), posición inicial fija (el mismo grupo se ve igual), resaltado al pasar el mouse o con el teclado, y la lista de conexiones como texto.
+- `/redes` pasa a ser pública (solo lectura, `viewer`): los visitantes ven canales, posteos y vínculos con notas (sin los rechazados ni notas DEMO); no ven errores de los canales ni los formularios. El mapa de la historia también muestra la capa de redes al público.
+- Sentimiento: filtro por revisión (sin revisar / confirmadas / rechazadas) y tabla «Lecturas por grupo» con enlace a revisar; «Para hacer» lleva ahí. `current_group_analysis` (reemplaza a `group_review_filter`) define el análisis vigente de cada grupo para Sentimiento, el resumen, los informes y «Para hacer»: con sesión, el último válido salvo rechazado; para visitantes, el último confirmado.
+- Neon migrado a `0016` el 2026-10-19 (31 análisis válidos quedaron pendientes de revisión).
+- Menos emojis: quedan solo ☰ (menú) y 📡 (logo). Contador de clics y autoría en insignias neutras.
+- Selector de tema (automático / claro / oscuro) en la barra; se guarda en el navegador y `static/js/theme.js` lo aplica antes de pintar. Los valores del tema oscuro van dos veces en `app.css` (por el sistema y por la elección): si cambia uno, cambiar el otro.
+- Métricas: la agenda compartida semanal es un mapa de calor (una tonalidad, tramos que se duplican: <1, 1–2, 2–4, 4–8, ≥8 %; con 0–10 % todo quedaba del mismo color porque los valores reales son de 0 a 3 %). Rayado = menos de 5 historias en común.
+- Tablas `responsive` en el celular: la celda pasó de flex a grilla (etiqueta a la izquierda, contenido apilado); `/grupos`, `/alertas`, `/fuentes` y `/metricas` se salían de la pantalla.
+- Por pedido del usuario no se corrieron pruebas después de agregar el mapa y hacer pública `/redes` (sí antes, en SQLite y PostgreSQL, con el resto de esta tanda). Sin pruebas propias del mapa todavía.
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.

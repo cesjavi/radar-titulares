@@ -23,7 +23,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from radar.ai.service import group_review_filter
+from radar.ai.service import current_group_analysis
 from radar.analysis import ALGORITHM_VERSION, headline_changes
 from radar.metrics import agenda_metrics
 from radar.models import (
@@ -231,10 +231,9 @@ def _tone(db, group_ids, media, include_demo, names, public=False) -> dict:
     latest: dict[int, AiGroupAnalysis] = {}
     for i in range(0, len(group_ids), 500):
         for ga in db.scalars(select(AiGroupAnalysis)
-                             .where(AiGroupAnalysis.status == "ok", group_review_filter(public),
-                                    AiGroupAnalysis.group_id.in_(group_ids[i:i + 500]))
-                             .order_by(AiGroupAnalysis.created_at.desc(), AiGroupAnalysis.id.desc())):
-            latest.setdefault(ga.group_id, ga)
+                             .where(current_group_analysis(public),
+                                    AiGroupAnalysis.group_id.in_(group_ids[i:i + 500]))):
+            latest[ga.group_id] = ga
     parsed = {gid: (_json(ga.article_ids, []), _json(ga.result, {})) for gid, ga in latest.items()}
     all_ids = {aid for aids, _ in parsed.values() for aid in aids if isinstance(aid, int)}
     arts = {}

@@ -10,7 +10,7 @@
     {% if a.subtitle %}<div class="muted small clamp">{{ a.subtitle }}</div>{% endif %}
     <div class="small muted mt-4">
       {% if a.author %}
-        <span class="badge badge-author-has" title="Nota firmada por su autor">✍️ {{ a.author }}</span>
+        <span class="badge badge-author-has" title="Nota firmada por su autor">Por {{ a.author }}</span>
       {% else %}
         <span class="badge badge-author-none" title="Nota sin firma individual (publicada por la redacción general o agencia)">Sin firma</span>
       {% endif %}
@@ -26,7 +26,7 @@
     </div>
   </div></td>
   <td data-label="Clicks" class="nowrap small num">
-    <span class="badge badge-clicks" title="{{ a.clicks or 0 }} clicks registrados">👆 {{ a.clicks or 0 }}</span>
+    <span class="badge badge-clicks" title="{{ a.clicks or 0 }} clicks registrados">{{ a.clicks or 0 }}</span>
   </td>
   <td data-label="Publicada" class="nowrap small">{{ fmt_pub(a) }}</td>
   <td data-label="Detectada" class="nowrap small">{{ a.first_seen_at | local_dt }}</td>

@@ -32,8 +32,8 @@
   <label>Autoría
     <select name="autor">
       <option value="">Todas</option>
-      <option value="con_autor" {{ 'selected' if filters.autor == 'con_autor' }}>✍️ Con autor (firmadas)</option>
-      <option value="sin_autor" {{ 'selected' if filters.autor == 'sin_autor' }}>⚪ Sin firma (redacción/agencia)</option>
+      <option value="con_autor" {{ 'selected' if filters.autor == 'con_autor' }}>Con autor (firmadas)</option>
+      <option value="sin_autor" {{ 'selected' if filters.autor == 'sin_autor' }}>Sin firma (redacción/agencia)</option>
     </select>
   </label>
   <label>Clicks
@@ -48,7 +48,7 @@
   <label>Orden
     <select name="orden">
       <option value="recientes" {{ 'selected' if filters.orden == 'recientes' }}>Más recientes</option>
-      <option value="clicks" {{ 'selected' if filters.orden == 'clicks' }}>Más clickeadas 🔥</option>
+      <option value="clicks" {{ 'selected' if filters.orden == 'clicks' }}>Más clickeadas</option>
     </select>
   </label>
   <label class="inline"><input type="checkbox" name="relacionadas" value="true" {{ 'checked' if filters.relacionadas }}> Solo con coincidencias</label>
@@ -60,8 +60,8 @@
 </form>
 <div class="legend-bar">
   <span class="legend-title">Leyenda de autoría:</span>
-  <span class="badge badge-author-has" title="El medio publicó la nota con firma y apellido del autor">✍️ Con autor (nota firmada)</span>
-  <span class="badge badge-author-none" title="El medio publicó la nota sin firma individual (redacción general o cable)">⚪ Sin firma (redacción general / agencia)</span>
+  <span class="badge badge-author-has" title="El medio publicó la nota con firma y apellido del autor">Con autor (nota firmada)</span>
+  <span class="badge badge-author-none" title="El medio publicó la nota sin firma individual (redacción general o cable)">Sin firma (redacción general / agencia)</span>
 </div>
 <div id="results">
   {% include "partials/article_table.html" %}

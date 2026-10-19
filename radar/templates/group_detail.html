@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Grupo #{{ g.id }} · Radar de Titulares{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', path='js/graph.js') }}" defer></script>{% endblock %}
 {% block content %}
 <p><a href="/grupos">← Grupos</a></p>
 {% if error %}<p class="alert alert-error" role="alert">{{ error }}</p>{% endif %}
@@ -55,6 +56,27 @@
     {% endfor %}
   </ul>
   {% endif %}
+</section>
+
+<section class="card" id="grafo">
+  <h2>Mapa de la historia</h2>
+  <p class="small muted">Medios, notas, nombres que aparecen en los titulares y posteos de redes vinculados. <strong>Una línea</strong> une cosas que comparten palabras o que se publicaron juntas: no dice que el mensaje sea el mismo ni que haya coordinación. <strong>Una flecha</strong> aparece solo cuando hay una cita, un enlace o un reenvío explícito. El orden de las horas nunca dibuja una flecha.</p>
+  <div class="graph-legend small" aria-hidden="true">
+    <span><svg viewBox="0 0 20 20"><circle class="g-node g-medio" cx="10" cy="10" r="8"></circle></svg>Medio</span>
+    <span><svg viewBox="0 0 20 20"><circle class="g-node g-nota" cx="10" cy="10" r="5"></circle></svg>Nota</span>
+    <span><svg viewBox="0 0 20 20"><circle class="g-node g-actor" cx="10" cy="10" r="6"></circle></svg>Nombre en los titulares</span>
+    <span><svg viewBox="0 0 20 20"><circle class="g-node g-cuenta" cx="10" cy="10" r="7"></circle></svg>Cuenta de red social</span>
+    <span><svg viewBox="0 0 20 20"><circle class="g-node g-posteo" cx="10" cy="10" r="4"></circle></svg>Posteo</span>
+    <span><svg viewBox="0 0 34 10"><line class="g-edge g-coincide" x1="1" y1="5" x2="33" y2="5"></line></svg>palabras en común</span>
+    <span><svg viewBox="0 0 34 10"><line class="g-edge g-cita" x1="1" y1="5" x2="27" y2="5"></line><path class="g-arrow" d="M26 1 L33 5 L26 9 Z"></path></svg>cita, enlace o reenvío</span>
+  </div>
+  <div class="graph-box" data-graph-url="/grupos/{{ g.id }}/grafo">
+    <p class="small muted graph-status" role="status">Cargando el mapa…</p>
+  </div>
+  <details class="graph-list small">
+    <summary>Ver las conexiones como lista</summary>
+    <ul></ul>
+  </details>
 </section>
 
 <section class="card" id="ia">

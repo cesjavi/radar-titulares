@@ -3,7 +3,7 @@
 {% block content %}
 {% set tone_labels = {'favorable': 'Favorable', 'critico': 'Crítico', 'neutral': 'Neutral', 'incierto': 'Incierto'} %}
 <div class="report">
-<h1>{% if report %}{{ report.title }}{% else %}📑 Informes{% endif %}</h1>
+<h1>{% if report %}{{ report.title }}{% else %}Informes{% endif %}</h1>
 <p class="muted">
   Del {{ desde.strftime('%d/%m/%Y') }} al {{ hasta.strftime('%d/%m/%Y') }} (hora de Buenos Aires){% if data.media %} · solo <strong>{{ data.media.name }}</strong>{% else %} · todos los medios{% endif %}.
   {% if report %}Guardado el {{ report.created_at | local_dt }}{% if author %} por {{ author }}{% endif %}: muestra los datos tal como estaban ese día.{% endif %}

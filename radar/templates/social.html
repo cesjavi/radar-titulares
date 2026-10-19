@@ -120,7 +120,8 @@
   </article>
   <hr>
   {% else %}
-  <p class="muted">Todavía no hay posteos. Los de Telegram se recolectan con <code>python -m radar collect</code> (o desde «Ejecutar ahora» en Configuración); los de X se importan con el formulario de arriba.</p>
+  {% if public_view %}<p class="muted">Todavía no hay posteos para mostrar.</p>{% else %}
+  <p class="muted">Todavía no hay posteos. Los de Telegram se recolectan con <code>python -m radar collect</code> (o desde «Ejecutar ahora» en Configuración); los de X se importan con el formulario de arriba.</p>{% endif %}
   {% endfor %}
 </section>
 {% endblock %}

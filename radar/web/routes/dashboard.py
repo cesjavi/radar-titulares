@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from radar.ai.service import group_review_filter
+from radar.ai.service import current_group_analysis
 from radar.analysis import relevance, trends
 from radar.config import get_settings
 from radar.models import (
@@ -212,15 +212,9 @@ def summary(
     gids = [g.id for g in featured_raw]
     ai_analyses = {}
     if gids:
-        ai_rows = db.scalars(
-            select(AiGroupAnalysis)
-            .where(AiGroupAnalysis.group_id.in_(gids), AiGroupAnalysis.status == "ok",
-                   group_review_filter(is_public(request)))
-            .order_by(AiGroupAnalysis.created_at.desc())
-        ).all()
-        for ai_obj in ai_rows:
-            if ai_obj.group_id not in ai_analyses:
-                ai_analyses[ai_obj.group_id] = ai_obj
+        ai_analyses = {a.group_id: a for a in db.scalars(
+            select(AiGroupAnalysis).where(AiGroupAnalysis.group_id.in_(gids),
+                                          current_group_analysis(public)))}
 
     featured_groups = []
     for g in featured_raw:
@@ -242,7 +236,7 @@ def summary(
             has_fav = any(t.get("valoracion") == "favorable" for t in tones)
             has_crit = any(t.get("valoracion") == "critico" for t in tones)
             if enfoque == "opuesto" or (has_fav and has_crit):
-                sentiment_info = {"tipo": "opuesto", "label": "Enfoques opuestos ⚠️"}
+                sentiment_info = {"tipo": "opuesto", "label": "Enfoques opuestos"}
             elif enfoque == "diferente":
                 sentiment_info = {"tipo": "diferente", "label": "Enfoques distintos"}
             elif tones:
@@ -257,8 +251,7 @@ def summary(
                                                 StoryGroup.hidden_at.is_(None))
     ) or 0
     total_ai_analyses = db.scalar(
-        select(func.count(func.distinct(AiGroupAnalysis.group_id)))
-        .where(AiGroupAnalysis.status == "ok", group_review_filter(is_public(request)))
+        select(func.count(AiGroupAnalysis.id)).where(current_group_analysis(public))
     ) or 0
 
     media_filter = [] if demo else [Media.is_demo.is_(False)]
@@ -332,12 +325,10 @@ def summary(
                     ArticleRelation.relation_type.in_(REVIEW_QUEUE_TYPES))) or 0,
                 "ai": 0}
         if user.is_admin:
-            latest_ai = (select(func.max(AiGroupAnalysis.id)).where(AiGroupAnalysis.status == "ok")
-                         .group_by(AiGroupAnalysis.group_id))
             todo["ai"] = db.scalar(
                 select(func.count(AiGroupAnalysis.id))
                 .join(StoryGroup, StoryGroup.id == AiGroupAnalysis.group_id)
-                .where(AiGroupAnalysis.id.in_(latest_ai), AiGroupAnalysis.review_status == "pendiente",
+                .where(current_group_analysis(False, "pendiente"),
                        StoryGroup.status == "open", StoryGroup.hidden_at.is_(None))) or 0
 
     return render(request, "summary.html", {

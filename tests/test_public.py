@@ -244,3 +244,21 @@ def test_summary_differs_for_visitors_and_team(monkeypatch, db, story, admin):
         assert "Para hacer" in body and "Ordenar por:" in body
         assert "Cómo leer este radar" not in body
         assert "alerta" in body.split("Para hacer", 1)[1].split("</section>", 1)[0]
+
+
+def test_sentiment_review_filter(monkeypatch, db, story, admin):
+    group = db.scalar(select(StoryGroup))
+    ai = _group_ai(db, group, "sujeto-sintetico")
+    with public_client(monkeypatch) as visitor:
+        staff = TestClient(visitor.app)
+        login(staff)
+        body = staff.get("/sentimiento?revision=pendiente").text
+        assert "Lecturas por grupo" in body and f'/grupos/{group.id}#ia' in body
+        assert "sujeto-sintetico" not in staff.get("/sentimiento?revision=confirmada").text
+        # Un visitante no puede usar el filtro para ver lo que no está confirmado.
+        body = visitor.get("/sentimiento?revision=pendiente").text
+        assert "sujeto-sintetico" not in body and "Lecturas por grupo" not in body
+        ai.review_status = "rechazada"
+        db.commit()
+        assert "sujeto-sintetico" not in staff.get("/sentimiento").text
+        assert "sujeto-sintetico" in staff.get("/sentimiento?revision=rechazada").text

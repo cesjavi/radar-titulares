@@ -458,12 +458,22 @@ def analyze_group_for_admin(db: Session, group: StoryGroup, cfg: AiConfig | None
     return ANALYSIS_MESSAGES.get(analysis.status, "Falló la llamada al proveedor.")
 
 
-def group_review_filter(public: bool):
-    """Qué análisis de grupo cuentan en Sentimiento, el resumen y los informes: para visitantes,
-    solo los confirmados por una persona; para usuarios, todos menos los rechazados."""
+REVIEW_STATES = ("pendiente", "confirmada", "rechazada")
+
+
+def current_group_analysis(public: bool, review: str | None = None):
+    """Condición sobre AiGroupAnalysis: el análisis vigente de cada grupo, el que cuenta en
+    Sentimiento, el resumen y los informes. Para usuarios es el último válido, salvo que esté
+    rechazado (con `review`, solo si tiene esa revisión); para visitantes, el último confirmado."""
+    latest = select(func.max(AiGroupAnalysis.id)).where(AiGroupAnalysis.status == "ok")
     if public:
-        return AiGroupAnalysis.review_status == "confirmada"
-    return AiGroupAnalysis.review_status != "rechazada"
+        latest = latest.where(AiGroupAnalysis.review_status == "confirmada")
+        state = AiGroupAnalysis.review_status == "confirmada"
+    elif review in REVIEW_STATES:
+        state = AiGroupAnalysis.review_status == review
+    else:
+        state = AiGroupAnalysis.review_status != "rechazada"
+    return and_(AiGroupAnalysis.id.in_(latest.group_by(AiGroupAnalysis.group_id)), state)
 
 
 def latest_for_group(db: Session, group_id: int, public: bool = False) -> AiGroupAnalysis | None:
@@ -471,6 +481,6 @@ def latest_for_group(db: Session, group_id: int, public: bool = False) -> AiGrou
     stmt = select(AiGroupAnalysis).where(AiGroupAnalysis.group_id == group_id,
                                          AiGroupAnalysis.status == "ok")
     if public:
-        stmt = stmt.where(group_review_filter(True))
+        stmt = stmt.where(AiGroupAnalysis.review_status == "confirmada")
     return db.scalar(stmt.order_by(AiGroupAnalysis.created_at.desc(),
                                    AiGroupAnalysis.id.desc()).limit(1))
