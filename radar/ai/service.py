@@ -458,7 +458,19 @@ def analyze_group_for_admin(db: Session, group: StoryGroup, cfg: AiConfig | None
     return ANALYSIS_MESSAGES.get(analysis.status, "Falló la llamada al proveedor.")
 
 
-def latest_for_group(db: Session, group_id: int) -> AiGroupAnalysis | None:
-    return db.scalar(select(AiGroupAnalysis).where(
-        AiGroupAnalysis.group_id == group_id, AiGroupAnalysis.status == "ok")
-        .order_by(AiGroupAnalysis.created_at.desc(), AiGroupAnalysis.id.desc()).limit(1))
+def group_review_filter(public: bool):
+    """Qué análisis de grupo cuentan en Sentimiento, el resumen y los informes: para visitantes,
+    solo los confirmados por una persona; para usuarios, todos menos los rechazados."""
+    if public:
+        return AiGroupAnalysis.review_status == "confirmada"
+    return AiGroupAnalysis.review_status != "rechazada"
+
+
+def latest_for_group(db: Session, group_id: int, public: bool = False) -> AiGroupAnalysis | None:
+    """El último análisis válido del grupo. En la vista pública, el último confirmado."""
+    stmt = select(AiGroupAnalysis).where(AiGroupAnalysis.group_id == group_id,
+                                         AiGroupAnalysis.status == "ok")
+    if public:
+        stmt = stmt.where(group_review_filter(True))
+    return db.scalar(stmt.order_by(AiGroupAnalysis.created_at.desc(),
+                                   AiGroupAnalysis.id.desc()).limit(1))

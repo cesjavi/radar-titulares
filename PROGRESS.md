@@ -379,6 +379,33 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - Informes guardados (migración `0015`, tabla `saved_reports`): una foto en JSON, solo administradores la crean o borran; cualquier usuario con login la ve. No se recalcula al reprocesar ni le afecta la retención, así que sus enlaces a grupos pueden quedar rotos.
 - Con una copia de la base local (1863 notas, 65 grupos): 0,1–0,15 s para 7, 30 y 90 días en SQLite. Sin medir contra Neon; por las consultas de agenda y titulares (~3,5 s cada una ahí) puede tardar varios segundos.
 
+### Cambiado: textos de la portada y revisión de la lectura de IA (2026-10-19)
+- La portada y la lista de grupos ya no dicen «grupos coordinados» ni «noticias coordinadas» (contradecía el principio 1 y el propio aviso de la vista pública): ahora son «Grupos con coincidencias» / «Historias en varios medios». «Monitoreo en tiempo real» pasó a «seguimiento periódico».
+- Aviso de datos atrasados en la portada si no hubo recolección exitosa en 6 h (`STALE_AFTER` en `dashboard.py`). La copia local tenía 13 días sin recolectar y la portada seguía diciendo «tiempo real».
+- El título del bloque de alertas en la vista pública decía «Alertas revisadas» también con `public_alerts=todas` (que incluye pendientes); ahora dice «Alertas recientes» en ese caso.
+- Revisión humana del análisis de IA de un grupo (migración `0016`: `ai_group_analyses.review_status`, `reviewed_by_id`, `reviewed_at`; `review_group_ai` registra en `manual_reviews` con `target_type="ai_group"`). Solo el administrador confirma o rechaza, desde el detalle del grupo. Un análisis nuevo empieza pendiente; la caché devuelve la misma fila, así que reprocesar no pierde la revisión.
+- `group_review_filter`: los visitantes solo ven lecturas **confirmadas** (detalle del grupo, Sentimiento, insignias del resumen, tono de los informes); para usuarios no cuentan las **rechazadas**. Es el mismo criterio que ya tenía la comparación de relaciones.
+- Sentimiento contaba todos los análisis de un grupo: si se analizaba dos veces, el tono sumaba doble. Ahora toma el último por grupo y excluye los grupos ocultos.
+- `.alert`, `.alert-ok`, `.alert-warn` y `.alert-error` se usaban en ~30 lugares sin estilos: se agregaron.
+
+### Cambiado: portada distinta para visitantes y equipo (2026-10-19)
+- Arriba, para todos: «Hoy en los medios» (últimas 24 h por detección: notas, historias nuevas en 2 o más medios independientes, temas en alza, alertas); los totales históricos pasaron a una línea chica.
+- Solo con sesión: «Para hacer» (alertas pendientes, relaciones de la cola de revisión —`REVIEW_QUEUE_TYPES`, compartido con `/revision`—, lecturas de IA sin revisar si es administrador, fuentes con fallas).
+- Solo visitantes: «Cómo leer este radar» (plegable, tres puntos: léxico no es semántico, el orden temporal no es causa, las réplicas no suman). Sin filtros ni orden por interés: la portada pública usa siempre «más medios», 6 grupos, y no muestra cuántos grupos se ocultaron a mano.
+- Temas en alza subió a la mitad de la portada, con una barra SVG por tema (últimas 24 h contra lo habitual).
+- La CSP (`style-src 'self'`) bloqueaba todos los `style="…"` de las plantillas (10 errores de consola en la portada): se reemplazaron por clases (`.mt-4`, `.mb-4`, `.mt-8`, `.input-minutes`). No usar `style="…"` en plantillas.
+- En pantallas angostas la tabla de noticias desbordaba 91 px (en `.table.responsive` cada hijo del `td` era un ítem flex al lado de la etiqueta): el contenido de las celdas de varias líneas va en un `div`. Las cifras de «Hoy» van en dos columnas por debajo de 600 px.
+- Verificado con navegador sin interfaz sobre una copia de la base local: sin errores de consola, sin desborde horizontal a 390 px.
+
+### Agregado: gráficos de la portada (2026-10-19)
+- Actividad del radar: notas **detectadas** por hora en las últimas 48 h (`hourly_counts`), barras SVG con tooltip por hora. Cuenta la detección, no la publicación: un tramo vacío largo suele ser recolección caída.
+- Línea de tiempo en cada tarjeta de historia (`group_timeline`): una fila por medio, ordenadas por nombre (no por quién publicó antes), un punto por nota en su hora de publicación declarada; círculo vacío = republicada. Las notas con solo fecha o sin dato no se ubican: se listan aparte («sin hora»). Solo se dibuja con dos o más notas con hora. El pie aclara que no dice quién tomó de quién.
+- Barras de notas en 24 h por medio en «Medios monitoreados».
+- Color: el medio se identifica siempre por su nombre escrito (fila o etiqueta), no por el color. Se validó la paleta con el script de la guía de visualización: cuatro colores de medio no se distinguen entre todos los pares (azul/violeta, naranja/amarillo), así que los gráficos usan un solo color y el nombre al lado.
+- Corregido: la clase de El Destape era `media-tag-el-destape` pero el slug es `eldestape` (nunca tuvo color); Perfil y Página/12 usaban dos celestes casi iguales (Página/12 pasó a verde azulado); las etiquetas de medio no usaban las variables `--media-*`, así que no cambiaban en tema oscuro.
+- Corregido: `button.link` (Ocultar/Mostrar en la tabla de noticias, entre otros) no tenía estilos y se veía como botón del sistema. Va con `:where()` para no pisar `.logout-btn`.
+- Verificado con navegador sin interfaz sobre una copia de la base, como visitante y con un usuario de prueba creado solo en la copia: sin errores de consola, sin desborde a 390 px.
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.

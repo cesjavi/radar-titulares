@@ -683,6 +683,12 @@ class AiGroupAnalysis(Base):
     errors: Mapped[str | None] = mapped_column(Text)
     input_chars: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    # Revisión humana de la lectura de la IA: los visitantes solo ven las «confirmada»; las
+    # «rechazada» no cuentan en Sentimiento ni en el resumen para nadie.
+    review_status: Mapped[str] = mapped_column(String(16), default="pendiente",
+                                               server_default="pendiente")
+    reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 class AiUsage(Base):

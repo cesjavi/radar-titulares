@@ -18,6 +18,7 @@ from radar.ai.service import (
     analyze_group_for_admin,
     blocked_reason,
     group_articles,
+    group_review_filter,
     latest_for_group,
     pair_filter,
 )
@@ -26,6 +27,7 @@ from radar.analysis.manual import (
     ManualError,
     merge_groups,
     remove_member,
+    review_group_ai,
     review_relation,
     set_group_hidden,
     split_group,
@@ -48,6 +50,7 @@ from radar.models import (
 from radar.web.deps import (
     demo_visible,
     get_db,
+    is_public,
     render,
     require_admin,
     require_analyst,
@@ -219,7 +222,7 @@ def group_detail(request: Request, group_id: int, db: Session = Depends(get_db),
                                                        StoryGroup.id != group.id)
                               .order_by(StoryGroup.id.desc()).limit(50)).all()
     ai_cfg = load_ai_config(db)
-    ai = latest_for_group(db, group.id)
+    ai = latest_for_group(db, group.id, public=is_public(request))
     ai_notes = []
     if ai:
         by_id = {m.article_id: m.article for m in group.members}
@@ -342,6 +345,20 @@ def group_hide(group_id: int, request: Request, ocultar: bool = Form(True),
     return RedirectResponse(safe_return(volver, f"/grupos/{group_id}"), status_code=303)
 
 
+@router.post("/grupos/{group_id}/ia/{analysis_id}/revisar", dependencies=[Depends(verify_csrf)])
+def group_ai_review(group_id: int, analysis_id: int, decision: str = Form(...),
+                    note: str = Form("", max_length=2000), db: Session = Depends(get_db),
+                    user: User = Depends(require_admin)):
+    analysis = db.get(AiGroupAnalysis, analysis_id)
+    if analysis is None or analysis.group_id != group_id:
+        raise HTTPException(status_code=404, detail="El análisis no existe.")
+    try:
+        review_group_ai(db, analysis, decision, user, note)
+    except ManualError as exc:
+        return RedirectResponse(f"/grupos/{group_id}?ia={quote(str(exc))}", status_code=303)
+    return RedirectResponse(f"/grupos/{group_id}#ia", status_code=303)
+
+
 @router.post("/grupos/{group_id}/quitar", dependencies=[Depends(verify_csrf)])
 def group_remove(group_id: int, article_id: int = Form(...), note: str = Form("", max_length=2000),
                  db: Session = Depends(get_db), user: User = Depends(require_admin)):
@@ -409,9 +426,15 @@ def sentiment_dashboard(
     user: User = Depends(viewer),
 ):
     demo = demo_visible(request)
+    # El último análisis de cada grupo (uno viejo no suma dos veces el tono de las mismas notas).
+    # Sin los rechazados en la revisión; para visitantes, solo los confirmados.
+    latest_ids = (select(func.max(AiGroupAnalysis.id))
+                  .where(AiGroupAnalysis.status == "ok", group_review_filter(is_public(request)))
+                  .group_by(AiGroupAnalysis.group_id))
     group_analyses = db.scalars(
         select(AiGroupAnalysis)
-        .where(AiGroupAnalysis.status == "ok")
+        .join(StoryGroup, StoryGroup.id == AiGroupAnalysis.group_id)
+        .where(AiGroupAnalysis.id.in_(latest_ids), StoryGroup.hidden_at.is_(None))
         .order_by(AiGroupAnalysis.created_at.desc())
         .limit(100)
     ).all()

@@ -8,6 +8,7 @@
       <p class="muted small">
         Análisis automatizado con IA del tono y enfoque de cada medio hacia los sujetos de las noticias agrupadas.
         Lectura sin verificar: no prueba sesgo, intencionalidad ni coordinación. La revisión humana tiene la última palabra.
+        Se cuenta el último análisis de cada grupo{% if public_view %}, y solo los que una persona ya revisó y confirmó{% else %}; los rechazados en la revisión no cuentan, y los pendientes no se muestran en la vista pública{% endif %}.
       </p>
     </div>
   </div>
@@ -61,7 +62,7 @@
       <h2>⚠️ Grupos con Enfoques Opuestos o Discrepancias Significativas</h2>
       <span class="badge badge-opuesto">{{ opposed_groups | length }} caso{{ 's' if opposed_groups | length != 1 }}</span>
     </div>
-    <p class="small muted">Casos donde los medios informaron sobre el mismo hecho pero con enfoques contrapuestos o valoraciones opuestas.</p>
+    <p class="small muted">Grupos en los que la IA leyó enfoques contrapuestos o valoraciones opuestas entre las notas. Es una discrepancia para revisar: no dice qué medio tiene razón ni qué afirmación es cierta.</p>
     <div class="grid-2">
       {% for g in opposed_groups %}
       <div class="group-card-mini">
@@ -80,7 +81,7 @@
           {% endfor %}
         </ul>
         {% endif %}
-        <div class="small" style="margin-top: 8px;">
+        <div class="small mt-8">
           <a href="/grupos/{{ g.id }}" class="btn btn-small btn-ghost">Ver análisis detallado →</a>
         </div>
       </div>
@@ -147,8 +148,9 @@
     <div class="empty-state">
       <p class="muted">No hay análisis de sentimiento que coincidan con los filtros.</p>
       <p class="small muted">
-        El análisis de sentimiento se genera al analizar grupos de noticias con IA desde la vista de cada grupo (opcional).
-        Podés ingresar a <a href="/grupos">Grupos</a> para analizarlos.
+        {% if public_view %}Todavía no hay lecturas de IA revisadas para mostrar.
+        {% else %}El análisis de sentimiento se genera al analizar grupos de noticias con IA desde la vista de cada grupo (opcional).
+        Podés ingresar a <a href="/grupos">Grupos</a> para analizarlos.{% endif %}
       </p>
     </div>
     {% endif %}

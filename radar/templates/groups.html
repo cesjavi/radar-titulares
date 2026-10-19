@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Grupos Coordinados · Radar de Titulares{% endblock %}
+{% block title %}Grupos · Radar de Titulares{% endblock %}
 {% block content %}
 <div class="groups-page">
   <div class="page-header">
-    <h1 class="page-title">🎯 Detección de Grupos de Coincidencia Coordinada</h1>
+    <h1 class="page-title">🎯 Grupos de notas con coincidencias entre medios</h1>
     <p class="muted small">
       Notas de distintos medios unidas por coincidencias <strong>léxicas</strong> (titulares, expresiones, entidades).
       Un grupo no prueba coordinación ni indica qué medio originó la información. «Medios independientes» no cuenta republicaciones de agencias o terceros; Canal E y Revista Noticias cuentan como Perfil.
@@ -57,7 +57,7 @@
       {% for g, common, media_list, sentiment_info in rows %}
       <tr>
         <td data-label="Grupo">
-          <div style="margin-bottom: 4px;">
+          <div class="mb-4">
             <a class="headline" href="/grupos/{{ g.id }}">{{ g.title }}</a>
             {% if g.locked %}
             <span class="badge badge-skipped" title="Tiene correcciones manuales">corregido</span>
@@ -69,7 +69,7 @@
             {% endif %}
           </div>
           {% if media_list %}
-          <div class="media-pills" style="margin-top: 4px; margin-bottom: 4px;">
+          <div class="media-pills mt-4 mb-4">
             {% for m in media_list %}
             <span class="media-tag media-tag-{{ m.slug }}" title="{{ m.name }}">{{ m.name }}</span>
             {% endfor %}

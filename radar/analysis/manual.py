@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from radar.alerts.engine import set_status
 from radar.analysis.engine import refresh_group_stats
 from radar.models import (
+    AiGroupAnalysis,
     Alert,
     Article,
     ArticleRelation,
@@ -49,6 +50,18 @@ def review_relation(db: Session, rel: ArticleRelation, decision: str, user: User
     rel.reviewed_at = utcnow() if decision != "pendiente" else None
     rel.review_note = (note or "").strip()[:2000] or None
     _log(db, user, "relation", rel.id, decision, note)
+
+
+def review_group_ai(db: Session, analysis: AiGroupAnalysis, decision: str, user: User,
+                    note: str | None) -> None:
+    """Confirma o rechaza la lectura de la IA sobre un grupo. Solo las confirmadas se muestran
+    en la vista pública; la revisión dice si la lectura es razonable, no qué afirmación es cierta."""
+    if decision not in REVIEW_DECISIONS:
+        raise ManualError("Decisión inválida.")
+    analysis.review_status = decision
+    analysis.reviewed_by_id = user.id if decision != "pendiente" else None
+    analysis.reviewed_at = utcnow() if decision != "pendiente" else None
+    _log(db, user, "ai_group", analysis.id, decision, note, {"grupo": analysis.group_id})
 
 
 def _active(group: StoryGroup) -> dict[int, StoryGroupMember]:

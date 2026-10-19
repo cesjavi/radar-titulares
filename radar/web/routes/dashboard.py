@@ -8,12 +8,14 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from radar.ai.service import group_review_filter
 from radar.analysis import relevance, trends
 from radar.config import get_settings
 from radar.models import (
     AiGroupAnalysis,
     Alert,
     Article,
+    ArticleRelation,
     CollectionRun,
     Media,
     StoryGroup,
@@ -22,7 +24,7 @@ from radar.models import (
     Topic,
     User,
 )
-from radar.web.routes.alerts_routes import PRIORITY_ORDER, _alert_scope
+from radar.web.routes.alerts_routes import PRIORITY_ORDER, REVIEW_QUEUE_TYPES, _alert_scope
 from radar.queries import topic_condition, visible_articles
 from radar.seed import get_setting
 from radar.text import excluded_terms_pattern, normalize_for_search
@@ -41,6 +43,55 @@ DASHBOARD_GROUP_ORDERS = {
     "interes": "Por interés (clics y ocultos)",
 }
 INTEREST_CANDIDATES = 300  # grupos que se puntúan para el orden por interés
+# Sin una recolección exitosa en este lapso, el resumen avisa que los datos pueden estar atrasados.
+STALE_AFTER = timedelta(hours=6)
+ACTIVITY_HOURS = 48  # barras de notas detectadas por hora
+
+# Geometría de la línea de tiempo de cada tarjeta (viewBox de 300 de ancho).
+TL_PLOT_X0, TL_PLOT_X1 = 96, 292  # zona de los puntos; a la izquierda van los nombres
+TL_LANE_H, TL_TOP = 16, 10
+
+
+def hourly_counts(times, now, hours: int = ACTIVITY_HOURS) -> list[int]:
+    """Notas por hora, de la más vieja (índice 0) a la última hora (índice hours-1)."""
+    counts = [0] * hours
+    for t in times:
+        idx = hours - 1 - int((now - t).total_seconds() // 3600)
+        if 0 <= idx < hours:
+            counts[idx] += 1
+    return counts
+
+
+def group_timeline(group: StoryGroup) -> dict | None:
+    """Puntos por hora de publicación declarada, una fila por medio (ordenadas por nombre, no por
+    quién publicó antes). Las notas sin hora no se ubican en la línea: se listan aparte. Hace falta
+    que al menos dos notas tengan hora."""
+    timed, untimed = [], []
+    for m in group.members:
+        a = m.article
+        if m.status != "activo" or a is None or a.media is None:
+            continue
+        if a.published_precision == "datetime" and a.published_at is not None:
+            timed.append(a)
+        else:
+            untimed.append(a)
+    if len(timed) < 2:
+        return None
+    start = min(a.published_at for a in timed)
+    end = max(a.published_at for a in timed)
+    span = (end - start).total_seconds()
+    names = sorted({a.media.name for a in timed}, key=str.casefold)
+    lane = {n: i for i, n in enumerate(names)}
+    width = TL_PLOT_X1 - TL_PLOT_X0
+    points = [{"x": round(TL_PLOT_X0 + (width * (a.published_at - start).total_seconds() / span
+                                         if span else width / 2), 1),
+               "y": TL_TOP + lane[a.media.name] * TL_LANE_H, "article": a}
+              for a in sorted(timed, key=lambda a: a.published_at)]
+    return {"lanes": [{"name": n, "y": TL_TOP + i * TL_LANE_H} for i, n in enumerate(names)],
+            "points": points, "start": start, "end": end, "span_min": round(span / 60),
+            "axis_y": TL_TOP + len(names) * TL_LANE_H + 2,
+            "height": TL_TOP + len(names) * TL_LANE_H + 14,
+            "untimed": sorted({a.media.name for a in untimed}, key=str.casefold)}
 
 
 def _excluded(group: StoryGroup, pattern: re.Pattern) -> bool:
@@ -66,9 +117,14 @@ def summary(
     user: User = Depends(viewer),
 ):
     demo = demo_visible(request)
+    public = is_public(request)
     since = utcnow() - timedelta(hours=24)
+    if public:
+        # Los visitantes ven una portada fija: sin filtros ni el orden por interés (que sale de los
+        # clics y ocultos del equipo).
+        orden, min_medios, limite = "medios", 0, 6
 
-    # Grupos coordinados destacados (núcleo de la app)
+    # Grupos destacados: notas de distintos medios con coincidencias léxicas
     group_stmt = (
         select(StoryGroup)
         .options(
@@ -84,6 +140,10 @@ def summary(
             select(StoryGroupMember.group_id).join(Article).where(Article.is_demo.is_(True))
         )
         group_stmt = group_stmt.where(StoryGroup.id.not_in(demo_groups))
+    # Historias nuevas del día en dos o más medios independientes (las réplicas no suman).
+    multi_24h = db.scalar(select(func.count()).select_from(
+        group_stmt.where(StoryGroup.independent_media_count >= 2, StoryGroup.first_seen_at >= since)
+        .subquery())) or 0
 
     if min_medios > 0:
         group_stmt = group_stmt.where(StoryGroup.independent_media_count >= min_medios)
@@ -154,7 +214,8 @@ def summary(
     if gids:
         ai_rows = db.scalars(
             select(AiGroupAnalysis)
-            .where(AiGroupAnalysis.group_id.in_(gids), AiGroupAnalysis.status == "ok")
+            .where(AiGroupAnalysis.group_id.in_(gids), AiGroupAnalysis.status == "ok",
+                   group_review_filter(is_public(request)))
             .order_by(AiGroupAnalysis.created_at.desc())
         ).all()
         for ai_obj in ai_rows:
@@ -189,14 +250,15 @@ def summary(
                 if main_val in ("favorable", "critico", "neutral"):
                     sentiment_info = {"tipo": main_val, "label": f"Tono {main_val}"}
 
-        featured_groups.append((g, common, media_list, sentiment_info))
+        featured_groups.append((g, common, media_list, sentiment_info, group_timeline(g)))
 
     total_groups = db.scalar(
         select(func.count(StoryGroup.id)).where(StoryGroup.status == "open",
                                                 StoryGroup.hidden_at.is_(None))
     ) or 0
     total_ai_analyses = db.scalar(
-        select(func.count(AiGroupAnalysis.id)).where(AiGroupAnalysis.status == "ok")
+        select(func.count(func.distinct(AiGroupAnalysis.group_id)))
+        .where(AiGroupAnalysis.status == "ok", group_review_filter(is_public(request)))
     ) or 0
 
     media_filter = [] if demo else [Media.is_demo.is_(False)]
@@ -251,13 +313,42 @@ def summary(
     total = db.scalar(select(func.count()).select_from(
         visible_articles(demo, hidden=None).subquery())) or 0
     last_ok = db.scalar(select(func.max(Subsource.last_success_at)))
+    stale = last_ok is None or utcnow() - last_ok > STALE_AFTER
+    notes_24h = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    now = utcnow()
+    activity = hourly_counts(db.scalars(
+        visible_articles(demo).with_only_columns(Article.first_seen_at)
+        .where(Article.first_seen_at >= now - timedelta(hours=ACTIVITY_HOURS))).all(), now)
+    trend_data = trends.load(db)
+    rising = (trend_data or {}).get("rising") or []
+    trend_max = max([max(r["count"], r.get("usual") or 0) for r in rising] or [0])
+
+    # Pendientes del equipo (no se calculan para visitantes).
+    todo = None
+    if not public:
+        todo = {"alerts": new_alerts, "failing": failing,
+                "relations": db.scalar(select(func.count(ArticleRelation.id)).where(
+                    ArticleRelation.review_status == "pendiente",
+                    ArticleRelation.relation_type.in_(REVIEW_QUEUE_TYPES))) or 0,
+                "ai": 0}
+        if user.is_admin:
+            latest_ai = (select(func.max(AiGroupAnalysis.id)).where(AiGroupAnalysis.status == "ok")
+                         .group_by(AiGroupAnalysis.group_id))
+            todo["ai"] = db.scalar(
+                select(func.count(AiGroupAnalysis.id))
+                .join(StoryGroup, StoryGroup.id == AiGroupAnalysis.group_id)
+                .where(AiGroupAnalysis.id.in_(latest_ai), AiGroupAnalysis.review_status == "pendiente",
+                       StoryGroup.status == "open", StoryGroup.hidden_at.is_(None))) or 0
 
     return render(request, "summary.html", {
         "featured_groups": featured_groups,
         "group_order": orden,
         "group_orders": DASHBOARD_GROUP_ORDERS,
         "interest_note": interest_note,
-        "trends": trends.load(db),
+        "trends": trend_data, "trend_max": trend_max,
+        "notes_24h": notes_24h, "multi_24h": multi_24h, "todo": todo,
+        "activity": activity, "activity_max": max(activity), "activity_hours": ACTIVITY_HOURS,
+        "media_max": max([n for _, n in per_media] or [0]),
         "min_medios": min_medios,
         "limite": limite,
         "hidden_count": hidden_count,
@@ -268,5 +359,6 @@ def summary(
         "failing": failing, "new_alerts": new_alerts, "total": total, "nav": "resumen",
         "health": media_health(db, demo), "labels": STATE_LABELS,
         "alert_prio": alert_prio, "top_alerts": top_alerts,
-        "last_ok": last_ok, "loaded_at": utcnow(),
+        "last_ok": last_ok, "stale": stale, "stale_hours": int(STALE_AFTER.total_seconds() // 3600),
+        "loaded_at": utcnow(),
     }, user=user)

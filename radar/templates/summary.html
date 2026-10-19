@@ -1,58 +1,110 @@
 {% extends "base.html" %}
-{% block title %}Radar de Titulares — Detección de Cobertura y Sentimiento{% endblock %}
+{% block title %}Radar de Titulares — Coincidencias entre medios{% endblock %}
 {% block content %}
 <div id="resumen" hx-get="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}" hx-trigger="every 120s" hx-select="#resumen" hx-target="this" hx-swap="outerHTML">
   <div class="dashboard-hero">
     <div class="hero-content">
       <h1 class="hero-title">Radar de Titulares</h1>
       <p class="hero-subtitle">
-        Monitoreo en tiempo real de medios argentinos: detección de <strong>grupos de noticias coordinadas</strong> por coincidencias léxicas y análisis de <strong>sentimiento y tono editorial</strong>.
+        Seguimiento periódico de titulares de medios argentinos: agrupa <strong>notas de distintos medios que comparten palabras, frases o nombres</strong>. Compartir palabras no indica que el mensaje sea el mismo ni que haya coordinación. A pedido, una <strong>lectura del tono con IA</strong> que pasa por revisión humana.
       </p>
     </div>
     <div class="hero-status small muted">
-      Última recolección exitosa: <strong>{{ last_ok | local_dt }}</strong> · pantalla actualizada a las {{ loaded_at | local_dt }} (se refresca sola cada 2 minutos) · <a href="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}" class="link">Actualizar ahora ↻</a>
+      Datos al <strong>{{ last_ok | local_dt }}</strong> (última recolección exitosa) · pantalla de las {{ loaded_at | local_dt }}, se refresca cada 2 minutos · <a href="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}" class="link">Actualizar ↻</a>
     </div>
   </div>
+  {% if stale %}
+  <p class="alert alert-warn" role="status">{% if last_ok %}La última recolección exitosa fue el {{ last_ok | local_dt }}: hace más de {{ stale_hours }} horas que no entran notas nuevas, así que lo que sigue puede no estar al día.{% else %}Todavía no hubo ninguna recolección exitosa.{% endif %}</p>
+  {% endif %}
 
+  <!-- HOY EN LOS MEDIOS (últimas 24 h) -->
+  <h2 class="section-title">Hoy en los medios <span class="small muted">· últimas 24 h</span></h2>
   <div class="stats stats-hero">
-    <a class="stat stat-primary" href="/grupos">
-      <span class="stat-value">{{ total_groups }}</span>
-      <span class="stat-label">🎯 Grupos coordinados</span>
+    <a class="stat" href="/noticias?periodo=24h">
+      <span class="stat-value">{{ notes_24h }}</span>
+      <span class="stat-label">Notas detectadas</span>
     </a>
-    <a class="stat" href="/sentimiento">
-      <span class="stat-value">{{ total_ai_analyses }}</span>
-      <span class="stat-label">📊 Análisis de sentimiento</span>
+    <a class="stat stat-primary" href="/grupos?min_medios=2">
+      <span class="stat-value">{{ multi_24h }}</span>
+      <span class="stat-label">Historias nuevas en 2 o más medios</span>
     </a>
-    <a class="stat" href="/noticias">
-      <span class="stat-value">{{ total }}</span>
-      <span class="stat-label">📰 Noticias registradas</span>
+    <a class="stat" href="#temas">
+      <span class="stat-value">{{ trends.rising | length if trends and trends.rising else 0 }}</span>
+      <span class="stat-label">Temas por encima de lo habitual</span>
     </a>
     {% if not (public_view and public_alerts == 'ninguna') %}
-    <a class="stat {{ 'stat-warn' if new_alerts > 0 }}" href="/alertas">
+    <a class="stat {{ 'stat-warn' if new_alerts > 0 and not public_view }}" href="/alertas">
       <span class="stat-value">{{ new_alerts }}</span>
-      <span class="stat-label">{{ 'Alertas publicadas' if public_view else 'Alertas pendientes' }}</span>
-    </a>
-    {% endif %}
-    {% if failing > 0 and not public_view %}
-    <a class="stat stat-warn" href="/fuentes">
-      <span class="stat-value">{{ failing }}</span>
-      <span class="stat-label">Fuentes con fallas</span>
+      <span class="stat-label">{{ ('Alertas revisadas' if public_alerts == 'revisadas' else 'Alertas publicadas') if public_view else 'Alertas pendientes' }}</span>
     </a>
     {% endif %}
   </div>
+  <p class="small muted totals-line">En total: {{ total }} notas registradas · <a href="/grupos">{{ total_groups }} grupos con coincidencias</a> · <a href="/sentimiento">{{ total_ai_analyses }} con lectura de IA{{ ' revisada' if public_view }}</a>.</p>
 
-  <!-- SECCIÓN PRINCIPAL: Detección de Grupos de Noticias Coordinadas -->
+  <!-- ACTIVIDAD DEL RADAR: notas detectadas por hora -->
+  <section class="card activity" aria-label="Actividad del radar">
+    <div class="card-head">
+      <h2 class="section-title">Actividad del radar <span class="small muted">· notas detectadas por hora, últimas {{ activity_hours }} h</span></h2>
+      <span class="small muted">{% if activity_max %}máximo: {{ activity_max }} en una hora{% else %}sin notas nuevas{% endif %}</span>
+    </div>
+    <svg class="activity-chart" viewBox="0 0 {{ activity_hours * 10 }} 64" preserveAspectRatio="none" role="img"
+         aria-label="{{ activity | sum }} notas detectadas en las últimas {{ activity_hours }} horas">
+      {% for n in activity %}{% set i = loop.index0 %}{% set ago = activity_hours - i %}
+      <g class="activity-col">
+        <title>{% if ago == 1 %}Última hora{% else %}Hace {{ ago }} a {{ ago - 1 }} h{% endif %}: {{ n }} nota{{ 's' if n != 1 }}</title>
+        <rect class="activity-hit" x="{{ i * 10 }}" y="0" width="10" height="64"></rect>
+        {% if n %}{% set h = [2, 60 * n / activity_max] | max %}<rect class="activity-bar" x="{{ i * 10 + 1 }}" y="{{ 63 - h }}" width="8" height="{{ h }}"></rect>{% endif %}
+      </g>
+      {% endfor %}
+      <line class="activity-base" x1="0" y1="63.5" x2="{{ activity_hours * 10 }}" y2="63.5"></line>
+    </svg>
+    <div class="activity-axis small muted"><span>hace {{ activity_hours }} h</span><span>hace {{ activity_hours // 2 }} h</span><span>ahora</span></div>
+    <p class="small muted">Cuenta cuándo el radar detectó cada nota, no cuándo la publicó el medio: los picos siguen el ritmo de las recolecciones. Un tramo vacío largo suele querer decir que la recolección no corrió.</p>
+  </section>
+
+  {% if todo is not none %}
+  <!-- PARA HACER (solo usuarios con sesión) -->
+  {% set todo_total = todo.alerts + todo.failing + todo.relations + todo.ai %}
+  <section class="card todo-strip" aria-label="Pendientes del equipo">
+    <h2>Para hacer</h2>
+    {% if todo_total %}
+    <ul class="todo-list">
+      {% if todo.alerts %}<li><a href="/revision"><strong>{{ todo.alerts }}</strong> alerta{{ 's' if todo.alerts != 1 }} pendiente{{ 's' if todo.alerts != 1 }}</a></li>{% endif %}
+      {% if todo.relations %}<li><a href="/revision"><strong>{{ todo.relations }}</strong> relaci{{ 'ones' if todo.relations != 1 else 'ón' }} para revisar</a></li>{% endif %}
+      {% if todo.ai %}<li><a href="/sentimiento"><strong>{{ todo.ai }}</strong> lectura{{ 's' if todo.ai != 1 }} de IA sin revisar</a> <span class="small muted">(no se ven en la vista pública)</span></li>{% endif %}
+      {% if todo.failing %}<li class="todo-warn"><a href="/fuentes"><strong>{{ todo.failing }}</strong> fuente{{ 's' if todo.failing != 1 }} con fallas</a></li>{% endif %}
+    </ul>
+    {% else %}
+    <p class="small muted">Nada pendiente.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if public_view %}
+  <!-- CÓMO LEER ESTO (solo visitantes) -->
+  <details class="card how-to-read">
+    <summary><strong>Cómo leer este radar</strong> <span class="small muted">· tres cosas que conviene saber</span></summary>
+    <ul>
+      <li><strong>Una coincidencia es de palabras.</strong> Dos notas se agrupan porque comparten términos, frases o nombres en el titular. No quiere decir que digan lo mismo ni que los medios se hayan puesto de acuerdo.</li>
+      <li><strong>Antes no es causa.</strong> Que un medio publique o aparezca primero no dice que haya originado la información: puede haber una fuente común, distintos horarios de cierre o simplemente cuándo pasó el radar.</li>
+      <li><strong>Las réplicas no suman.</strong> Una nota de agencia republicada no cuenta como otro medio independiente.</li>
+    </ul>
+  </details>
+  {% endif %}
+
+  <!-- SECCIÓN PRINCIPAL: grupos de notas con coincidencias léxicas entre medios -->
   <section class="card card-featured" id="grupos-destacados-container">
     <div class="card-head">
       <div>
-        <h2>🎯 Detección de Grupos de Noticias Coordinadas</h2>
+        <h2>🎯 Historias en varios medios</h2>
         <p class="small muted">
-          Notas de distintos medios agrupadas por compartir términos, expresiones y entidades clave en sus titulares.
+          Notas de distintos medios agrupadas por compartir términos, expresiones y entidades en sus titulares. Es una coincidencia de palabras: no dice qué medio publicó primero ni que se hayan puesto de acuerdo.
         </p>
       </div>
       <a href="/grupos" class="btn btn-ghost">Ver todos los grupos ({{ total_groups }}) →</a>
     </div>
 
+    {% if not public_view %}
     <!-- Barra de orden y filtros -->
     <form method="get" action="/#grupos-destacados-container"
           hx-get="/" hx-target="#grupos-destacados-container" hx-select="#grupos-destacados-container"
@@ -98,9 +150,10 @@
       {% if hidden_count %}{{ hidden_count }} grupo{{ 's' if hidden_count != 1 }} oculto{{ 's' if hidden_count != 1 }} a mano (<a href="/grupos?ocultos=true">ver</a>){% endif %}{% if hidden_count and excluded_count %} · {% endif %}{% if excluded_count %}{{ excluded_count }} excluido{{ 's' if excluded_count != 1 }} por términos{% if user and user.is_admin %} (<a href="/configuracion#resumen">editar</a>){% endif %}{% endif %}
     </p>
     {% endif %}
+    {% endif %}
     {% if featured_groups %}
     <div class="groups-grid">
-      {% for g, common, media_list, sentiment_info in featured_groups %}
+      {% for g, common, media_list, sentiment_info, tl in featured_groups %}
       <article class="group-card">
         <div class="group-card-header">
           <div class="group-badges">
@@ -111,7 +164,7 @@
               📰 {{ g.article_count }} nota{{ 's' if g.article_count != 1 }}
             </span>
             {% if sentiment_info %}
-            <span class="badge badge-sentiment-{{ sentiment_info.tipo }}" title="Sentimiento / Enfoque detectado">
+            <span class="badge badge-sentiment-{{ sentiment_info.tipo }}" title="Lectura de la IA{{ ' revisada por una persona' if public_view else ', sin verificar' }}">
               {{ sentiment_info.label }}
             </span>
             {% endif %}
@@ -128,6 +181,24 @@
           <span class="media-tag media-tag-{{ m.slug }}" title="{{ m.name }}">{{ m.name }}</span>
           {% endfor %}
         </div>
+
+        {% if tl %}
+        {% set same_day = (tl.start | local_dt('%d/%m')) == (tl.end | local_dt('%d/%m')) %}
+        <figure class="timeline">
+          <svg viewBox="0 0 300 {{ tl.height }}" role="img" aria-label="Hora de publicación declarada por cada medio">
+            {% for l in tl.lanes %}
+            <text class="tl-label" x="0" y="{{ l.y + 3 }}">{{ l.name | truncate(17, true, '…', 0) }}</text>
+            <line class="tl-lane" x1="96" y1="{{ l.y }}" x2="292" y2="{{ l.y }}"></line>
+            {% endfor %}
+            {% for pt in tl.points %}
+            <circle class="tl-dot{{ ' tl-dot-replica' if pt.article.is_syndicated }}" cx="{{ pt.x }}" cy="{{ pt.y }}" r="4"><title>{{ pt.article.media.name }} · {{ pt.article.published_at | local_dt }}{{ ' · republicada' if pt.article.is_syndicated }}: {{ pt.article.title }}</title></circle>
+            {% endfor %}
+            <text class="tl-axis" x="96" y="{{ tl.axis_y + 9 }}">{{ tl.start | local_dt('%d/%m %H:%M') }}</text>
+            <text class="tl-axis" x="292" y="{{ tl.axis_y + 9 }}" text-anchor="end">{{ tl.end | local_dt('%H:%M' if same_day else '%d/%m %H:%M') }}</text>
+          </svg>
+          <figcaption class="small muted">Hora de publicación que declara cada medio{% if tl.span_min %} · {% if tl.span_min < 90 %}{{ tl.span_min }} min{% else %}{{ '%g' | format((tl.span_min / 60) | round(1)) }} h{% endif %} entre la primera y la última{% endif %}. No dice quién tomó de quién.{% if tl.points | selectattr('article.is_syndicated') | list %} Círculo vacío: nota republicada (no cuenta como medio independiente).{% endif %}{% if tl.untimed %} Sin hora (solo fecha o sin dato): {{ tl.untimed | join(', ') }}.{% endif %}</figcaption>
+        </figure>
+        {% endif %}
 
         {% if common.frases %}
         <div class="group-phrases">
@@ -156,30 +227,43 @@
       </article>
       {% endfor %}
     </div>
+    {% elif public_view %}
+    <p class="muted">Todavía no hay historias en varios medios para mostrar.</p>
     {% else %}
     <p class="muted">No se detectaron grupos de noticias todavía. Corré la recolección con <code>python -m radar collect</code>.</p>
     {% endif %}
   </section>
 
-  <!-- ACCESO RÁPIDO A SENTIMIENTO Y ALERTAS -->
+  <!-- TEMAS EN ALZA Y ALERTAS -->
   <div class="grid-2">
-    <section class="card card-sentiment-banner">
-      <div class="card-head">
-        <h2>📊 Sentimiento y Tono Editorial</h2>
-        <span class="badge badge-sentiment-opuesto">IA</span>
-      </div>
-      <p class="small muted">
-        Lectura automatizada del tono (favorable, crítico o neutral) de cada medio hacia los sujetos de las noticias y detección de enfoques opuestos.
-      </p>
-      <div style="margin-top: 14px;">
-        <a href="/sentimiento" class="btn">Explorar análisis de sentimiento →</a>
-      </div>
+    <section class="card" id="temas">
+      <h2>📈 Temas en alza</h2>
+      {% if trends and trends.rising %}
+      <ul class="trend-list">
+        {% for r in trends.rising %}
+        <li>
+          <div class="trend-head">
+            <a href="/noticias?topic={{ r.slug }}&periodo=24h">{{ r.name }}</a>
+            <span class="small"><strong>{{ r.count }}</strong> nota{{ 's' if r.count != 1 }} <span class="muted">· lo habitual: {{ '%g' | format(r.usual) }}</span></span>
+          </div>
+          <svg class="trend-bar" viewBox="0 0 100 12" preserveAspectRatio="none" role="img" aria-label="{{ r.count }} notas contra {{ '%g' | format(r.usual) }} habituales">
+            <rect class="trend-now" y="0" height="6" width="{{ (100 * r.count / trend_max) if trend_max else 0 }}"></rect>
+            <rect class="trend-usual" y="8" height="4" width="{{ (100 * r.usual / trend_max) if trend_max else 0 }}"></rect>
+          </svg>
+          {% if r.media_names %}<div class="small muted">{{ r.media | default(0) }} medio{{ 's' if r.media != 1 }} independiente{{ 's' if r.media != 1 }}: {{ r.media_names | join(', ') }}</div>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="small muted"><span class="legend-swatch trend-now-swatch"></span> últimas {{ trends.window_hours }} h · <span class="legend-swatch trend-usual-swatch"></span> lo habitual en los últimos {{ trends.baseline_days }} días (calculado {{ trends.computed_at | local_dt }}). Es volumen: no explica por qué.</p>
+      {% else %}
+      <p class="small muted">Ningún tema de seguimiento está por encima de su ritmo habitual.{% if trends and trends.note %} {{ trends.note }}{% endif %}</p>
+      {% endif %}
     </section>
 
     {% if top_alerts %}
     <section class="card">
       <div class="card-head">
-        <h2>{{ 'Alertas revisadas' if public_view else 'Alertas prioritarias' }}</h2>
+        <h2>{{ ('Alertas revisadas' if public_alerts == 'revisadas' else 'Alertas recientes') if public_view else 'Alertas prioritarias' }}</h2>
         <a href="/alertas" class="small">Ver todas →</a>
       </div>
       <ul class="compact-list">
@@ -193,19 +277,15 @@
       </ul>
     </section>
     {% else %}
-    <section class="card">
-      <h2>Cobertura por medios (últimas 24 h)</h2>
-      <table class="table compact">
-        <tbody>
-        {% for m, n in per_media[:4] %}
-          {% set st = health.get(m.id, 'operativa') %}
-          <tr>
-            <td><a href="/noticias?media={{ m.slug }}">{{ m.name }}</a></td>
-            <td class="num">{{ n }}</td>
-          </tr>
-        {% endfor %}
-        </tbody>
-      </table>
+    <section class="card card-sentiment-banner">
+      <div class="card-head">
+        <h2>📊 Sentimiento y tono editorial</h2>
+        <span class="badge badge-sentiment-opuesto">IA</span>
+      </div>
+      <p class="small muted">
+        Lectura automática del tono (favorable, crítico o neutral) de cada nota hacia el sujeto de la noticia, y de enfoques que la IA ve opuestos. Es una lectura para revisar: no prueba sesgo ni intención{% if public_view %}, y acá solo aparecen las que una persona ya revisó{% endif %}.
+      </p>
+      <p><a href="/sentimiento" class="btn">Ver las lecturas de tono →</a></p>
     </section>
     {% endif %}
   </div>
@@ -216,11 +296,11 @@
       <h2>Últimas noticias detectadas</h2>
       <a href="/noticias" class="btn btn-ghost btn-small">Ver todas las noticias →</a>
     </div>
-    <div class="legend-bar small" style="margin-bottom: 12px;">
+    <div class="legend-bar small">
       <span class="legend-title">Autoría:</span>
       <span class="badge badge-author-has">✍️ Con autor</span>
       <span class="badge badge-author-none">⚪ Sin firma</span>
-      <span style="margin-left: 12px;" class="legend-title">Popularidad:</span>
+      <span class="legend-title legend-gap">Popularidad:</span>
       <span class="badge badge-clicks">👆 Contador de clicks</span>
     </div>
     {% if latest %}
@@ -236,7 +316,7 @@
   <!-- FUENTES Y TEMAS -->
   <div class="grid-2">
     <section class="card">
-      <h2>Medios monitoreados</h2>
+      <h2>Medios monitoreados <span class="small muted">· notas en 24 h</span></h2>
       <table class="table compact">
         <tbody>
         {% for m, n in per_media %}
@@ -256,24 +336,14 @@
               {{ n }}
               {% endif %}
             </td>
+            <td class="bar-col"><svg class="bar" viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="{{ n }} notas"><rect width="{{ (100 * n / media_max) if media_max else 0 }}" height="10"></rect></svg></td>
           </tr>
         {% endfor %}
         </tbody>
       </table>
     </section>
     <section class="card">
-      <h2>Temas de seguimiento</h2>
-      {% if trends and trends.rising %}
-      <div class="rising-topics">
-        <h3 class="small">📈 En alza</h3>
-        <ul class="compact-list">
-          {% for r in trends.rising %}
-          <li><a href="/noticias?topic={{ r.slug }}&periodo=24h">{{ r.name }}</a>: {{ r.count }} notas en las últimas {{ trends.window_hours }} h; lo habitual es {{ '%g' | format(r.usual) }}.{% if r.media_names %} <span class="small muted">{{ r.media | default(0) }} medio{{ 's' if r.media != 1 }} independiente{{ 's' if r.media != 1 }}: {{ r.media_names | join(', ') }}</span>{% endif %}</li>
-          {% endfor %}
-        </ul>
-        <p class="small muted">Más notas que su ritmo de los últimos {{ trends.baseline_days }} días (calculado {{ trends.computed_at | local_dt }}). Es volumen, no explica por qué.</p>
-      </div>
-      {% endif %}
+      <h2>Temas de seguimiento <span class="small muted">· notas en 24 h</span></h2>
       <table class="table compact">
         <tbody>
         {% for t, n in per_topic %}
@@ -283,6 +353,7 @@
         {% endfor %}
         </tbody>
       </table>
+      {% if top_alerts %}<p class="small"><a href="/sentimiento">📊 Ver las lecturas de tono con IA{{ ' revisadas' if public_view }} →</a></p>{% endif %}
     </section>
   </div>
 </div>

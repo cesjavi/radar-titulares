@@ -217,7 +217,7 @@
 
 <section class="card" id="tono">
   <div class="card-head"><h2>7. Tono según la IA</h2>{{ csv_link('tono') }}</div>
-  <p class="small muted"><strong>Lectura automática, sin verificar.</strong> Valoración de cada nota hacia el sujeto central según el último análisis de IA de cada grupo. Cubre {{ data.tone.groups_analyzed }} de {{ data.tone.groups_total }} grupos del período: solo los que alguien mandó a analizar, así que no es una muestra representativa. No prueba sesgo, intención ni coordinación; la revisión humana tiene la última palabra.</p>
+  <p class="small muted"><strong>Lectura automática, sin verificar.</strong> Valoración de cada nota hacia el sujeto central según el último análisis de IA de cada grupo. Cubre {{ data.tone.groups_analyzed }} de {{ data.tone.groups_total }} grupos del período: solo los que alguien mandó a analizar{% if public_view %} y una persona ya revisó y confirmó{% else %} (sin los rechazados en la revisión){% endif %}, así que no es una muestra representativa. No prueba sesgo, intención ni coordinación; la revisión humana tiene la última palabra.</p>
   {% if data.tone.by_media %}
   <table class="table compact">
     <thead><tr><th>Medio</th>{% for v, label in tone_labels.items() %}<th class="num">{{ label }}</th>{% endfor %}</tr></thead>
