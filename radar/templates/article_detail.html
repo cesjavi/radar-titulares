@@ -67,6 +67,19 @@
   </table>
 </section>
 
+<section class="card">
+  <h2>Posible fuente</h2>
+  <p class="small muted">Lo que la nota atribuye en el titular, la bajada{% if a.body_text %} y el cuerpo{% else %} (el cuerpo no está disponible: el medio no lo publica en el feed){% endif %}. Es una pista para revisar: no confirma de dónde salió la información.</p>
+  {% if attributions %}
+  <ul class="sources-list">
+    {% for s in attributions %}
+    <li><strong>{{ s.etiqueta }}</strong>{% if s.tipo in ('atribucion', 'agencia') %}: {{ s.fuente }}{% endif %} <span class="muted small">({{ s.donde }})</span>
+      <div class="small muted">{{ s.fragmento }}</div></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">No se encontró ninguna atribución en el texto disponible.</p>{% endif %}
+</section>
+
 {% if a.references %}
 <section class="card">
   <h2>Referencias explícitas a otros medios</h2>

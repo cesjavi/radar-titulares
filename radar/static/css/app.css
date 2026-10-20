@@ -744,6 +744,11 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
 .g-on .g-label-hover, .g-item:hover .g-label-hover { display: inline; }
 .g-edge.g-on { stroke-width: 2.6; }
 
+/* Posibles fuentes (detalle de grupo y de nota) */
+.sources-list { margin: 6px 0 12px; padding-left: 20px; }
+.sources-list li { margin-bottom: 6px; overflow-wrap: anywhere; }
+#fuentes h4 { margin: 14px 0 4px; font-size: 1em; font-weight: 600; }
+
 /* Informes: pestañas, cambios de titular y resúmenes */
 .report-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 16px; border-bottom: 1px solid var(--border); }
 .report-tabs a { padding: 8px 12px; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px; }

@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session, selectinload
 
+from radar.analysis.attribution import find_attributions
 from radar.analysis.manual import set_article_hidden
 from radar.analysis.relations import TYPE_LABELS
 from radar.config import get_settings
@@ -211,4 +212,6 @@ def article_detail(
         "a": article, "relations": relation_rows, "reviews": reviews,
         "groups": groups, "rel_labels": TYPE_LABELS,
         "topic_hits": matching_topics(article, topics), "nav": "noticias",
+        # Las referencias a otros medios ya tienen su propia sección.
+        "attributions": find_attributions(article),
     }, user=user)

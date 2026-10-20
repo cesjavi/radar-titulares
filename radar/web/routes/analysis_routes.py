@@ -24,6 +24,7 @@ from radar.ai.service import (
     pair_filter,
 )
 from radar.analysis import ALGORITHM_VERSION, evaluation
+from radar.analysis.attribution import group_sources
 from radar.analysis.manual import (
     ManualError,
     merge_groups,
@@ -45,6 +46,7 @@ from radar.models import (
     ArticleRelation,
     ManualReview,
     Media,
+    MediaReference,
     StoryGroup,
     StoryGroupMember,
     User,
@@ -218,6 +220,11 @@ def group_detail(request: Request, group_id: int, db: Session = Depends(get_db),
     reviews = db.scalars(select(ManualReview).where(ManualReview.target_type == "group",
                                                     ManualReview.target_id == group.id)
                          .order_by(ManualReview.created_at.desc())).all()
+    refs_by_article: dict[int, list] = {}
+    for ref in (db.scalars(select(MediaReference).where(MediaReference.article_id.in_(ids)))
+                if ids else []):
+        refs_by_article.setdefault(ref.article_id, []).append(ref)
+    sources = group_sources([m.article for m in timed + untimed], refs_by_article)
     media_names = sorted({m.article.media.name for m in active})
     independent = sorted({m.article.media.name for m in active if not m.article.is_syndicated})
     other_groups = db.scalars(select(StoryGroup).where(StoryGroup.status == "open",
@@ -240,7 +247,7 @@ def group_detail(request: Request, group_id: int, db: Session = Depends(get_db),
         "ai_flags": _json(ai.flags, []) if ai else [], "ai_notes": ai_notes,
         "ai_enabled": ai_cfg.enabled, "ai_blocked": blocked_reason(db, ai_cfg),
         "ai_message": request.query_params.get("ia"),
-        "ai_note_count": len(group_articles(group)),
+        "ai_note_count": len(group_articles(group)), "sources": sources,
     }, user=user)
 
 

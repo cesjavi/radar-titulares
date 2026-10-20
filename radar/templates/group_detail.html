@@ -58,6 +58,40 @@
   {% endif %}
 </section>
 
+<section class="card" id="fuentes">
+  <h2>Posibles fuentes</h2>
+  <p class="small muted">Lo que cada nota atribuye en su texto: «según…», un comunicado, una denuncia, un posteo, una entrevista, una agencia u otro medio. Se lee el titular, la bajada y el cuerpo cuando el medio lo publica en el feed. Que varias notas citen lo mismo sugiere una fuente en común; no dice que un medio haya tomado de otro ni confirma la fuente.</p>
+  {% if sources.repetidas %}
+  <h3>En notas de varios medios</h3>
+  <ul class="sources-list">
+    {% for s in sources.repetidas %}
+    <li><strong>{{ s.etiqueta }}</strong>: {{ s.fuente }} <span class="muted small">— {{ s.medios | join(', ') }} ({{ s.notas }} nota{{ 's' if s.notas != 1 }})</span></li>
+    {% endfor %}
+  </ul>
+  {% elif sources.por_nota %}
+  <p class="muted">Ninguna atribución se repite en notas de distintos medios.</p>
+  {% endif %}
+  {% if sources.por_nota %}
+  <details class="small">
+    <summary>Ver por nota</summary>
+    {% for a, hits in sources.por_nota %}
+    <h4><span class="media-tag media-tag-{{ a.media.slug }}">{{ a.media.name }}</span> <a href="/noticias/{{ a.id }}">{{ a.title }}</a></h4>
+    <ul class="sources-list">
+      {% for s in hits %}
+      <li><strong>{{ s.etiqueta }}</strong>{% if s.tipo in ('atribucion', 'agencia', 'medio') %}: {{ s.fuente }}{% endif %} <span class="muted">({{ s.donde }})</span>
+        <div class="muted">{{ s.fragmento }}</div></li>
+      {% endfor %}
+    </ul>
+    {% endfor %}
+  </details>
+  {% else %}
+  <p class="muted">Ninguna nota atribuye su información en el texto disponible.</p>
+  {% endif %}
+  {% if sources.sin_atribucion and sources.por_nota %}
+  <p class="small muted">Sin atribución visible: {% for a in sources.sin_atribucion %}{{ a.media.name }} («{{ a.title | truncate(60, true, '…', 0) }}»){{ '; ' if not loop.last }}{% endfor %}.</p>
+  {% endif %}
+</section>
+
 <section class="card" id="grafo">
   <h2>Mapa de la historia</h2>
   <p class="small muted">Medios, notas, nombres que aparecen en los titulares y posteos de redes vinculados. <strong>Una línea</strong> une cosas que comparten palabras o que se publicaron juntas: no dice que el mensaje sea el mismo ni que haya coordinación. <strong>Una flecha</strong> aparece solo cuando hay una cita, un enlace o un reenvío explícito. El orden de las horas nunca dibuja una flecha.</p>
