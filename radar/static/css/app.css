@@ -722,6 +722,15 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
 .g-node { stroke: var(--surface); stroke-width: 2; }
 .g-medio { fill: var(--surface); stroke: var(--text); stroke-width: 2.5; }
 .g-nota { fill: var(--accent); }
+/* Cada nota y su medio con el color del medio (los medios sin color propio quedan en azul). */
+.g-nota.g-m-perfil { fill: var(--media-perfil); }
+.g-nota.g-m-infobae { fill: var(--media-infobae); }
+.g-nota.g-m-eldestape { fill: var(--media-eldestape); }
+.g-nota.g-m-pagina12 { fill: var(--media-pagina12); }
+.g-medio.g-m-perfil { stroke: var(--media-perfil); }
+.g-medio.g-m-infobae { stroke: var(--media-infobae); }
+.g-medio.g-m-eldestape { stroke: var(--media-eldestape); }
+.g-medio.g-m-pagina12 { stroke: var(--media-pagina12); }
 .g-actor { fill: var(--surface); stroke: var(--accent); stroke-width: 3; }
 .g-cuenta { fill: var(--text-secondary); }
 .g-posteo { fill: var(--muted); }
