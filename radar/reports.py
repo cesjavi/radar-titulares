@@ -46,6 +46,8 @@ MAX_DAYS = 180
 TOP_GROUPS = 20
 TOP_TOPICS = 15
 TONES = ("favorable", "critico", "neutral", "incierto")
+OWN_NOTES_LIMIT = 40
+PRECISION_LABELS = {"datetime": "Fecha y hora", "date": "Solo fecha", "none": "Sin dato"}
 
 
 def period_from_dates(desde: date, hasta: date) -> tuple[datetime, datetime]:
@@ -91,6 +93,7 @@ def build(db: Session, since: datetime, until: datetime, media: Media | None = N
         "topics": _topics(db, since, until, media, include_demo, names),
         "reviews": _reviews(db, since, until),
         "tone": _tone(db, group_ids, media, include_demo, names, public),
+        **({"media_extra": _media_extra(db, since, until, media, include_demo)} if media else {}),
     }
 
 
@@ -204,6 +207,35 @@ def _topics(db, since, until, media, include_demo, names) -> dict:
     return {"items": out[:TOP_TOPICS], "omitted": max(0, len(out) - TOP_TOPICS)}
 
 
+def _media_extra(db, since, until, media, include_demo) -> dict:
+    """Solo con un medio elegido: sus notas sin coincidencia en otro medio, la precisión de sus
+    fechas y cuántas van firmadas."""
+    cond = _article_filter(since, until, media, include_demo)
+    precision = Counter(dict(db.execute(select(Article.published_precision, func.count())
+                                        .where(*cond).group_by(Article.published_precision)).all()))
+    signed = db.scalar(select(func.count()).where(
+        *cond, Article.author.is_not(None), Article.author != "")) or 0
+    # En un grupo con otro medio independiente = con coincidencia. El resto, «sin coincidencia
+    # detectada»: lo cubrió solo este medio o el motor léxico no lo relacionó.
+    shared = (select(StoryGroupMember.article_id)
+              .join(StoryGroup, StoryGroup.id == StoryGroupMember.group_id)
+              .where(StoryGroupMember.status == "activo", StoryGroup.status == "open",
+                     StoryGroup.independent_media_count >= 2))
+    own_q = select(Article).where(*cond, Article.is_syndicated.is_(False),
+                                  Article.id.not_in(shared))
+    own_total = db.scalar(select(func.count()).select_from(own_q.subquery())) or 0
+    own = db.scalars(own_q.order_by(Article.first_seen_at.desc()).limit(OWN_NOTES_LIMIT)).all()
+    total = sum(precision.values())
+    return {
+        "total": total,
+        "precision": {k: precision.get(k, 0) for k in PRECISION_LABELS},
+        "signed": signed,
+        "own_total": own_total,
+        "own_notes": [{"id": a.id, "title": a.title, "first_seen": _iso(a.first_seen_at)}
+                      for a in own],
+    }
+
+
 def _reviews(db, since, until) -> dict:
     def counts(col, model_date, *where):
         return dict(db.execute(select(col, func.count()).where(model_date >= since,
@@ -280,6 +312,7 @@ SECTIONS = {
     "titulares": "Cambios de titular",
     "temas": "Temas",
     "tono": "Tono según la IA",
+    "propias": "Notas sin coincidencia en otro medio",
 }
 
 
@@ -326,6 +359,11 @@ def table(data: dict, section: str) -> tuple[list[str], list[list]]:
                 [[t["name"], t["count"], t["previous"], t["independent_media"],
                   ", ".join(f"{k}: {v}" for k, v in t["by_media"].items())]
                  for t in data["topics"]["items"]])
+    if section == "propias":
+        extra = data.get("media_extra") or {}
+        return (["Nota", "Titular", "Detectada"],
+                [[n["id"], n["title"], _local_text(n["first_seen"])]
+                 for n in extra.get("own_notes", [])])
     if section == "tono":
         return (["Medio", "Favorable", "Crítico", "Neutral", "Incierto"],
                 [[m["name"], *[m[v] for v in TONES]] for m in data["tone"]["by_media"]])
@@ -339,7 +377,10 @@ def _cell(value) -> str:
 
 
 def to_csv(data: dict, section: str) -> str:
-    headers, rows = table(data, section)
+    return rows_to_csv(*table(data, section))
+
+
+def rows_to_csv(headers: list[str], rows: list[list]) -> str:
     buf = io.StringIO()
     # Punto y coma y BOM: lo que espera Excel con configuración regional en español.
     writer = csv.writer(buf, delimiter=";", lineterminator="\r\n")

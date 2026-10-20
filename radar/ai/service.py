@@ -196,7 +196,8 @@ def select_candidates(db: Session, limit: int, min_priority: str = "baja") -> li
 
 
 def _complete_validated(db: Session, cfg: AiConfig, provider: Provider, analysis, usage_field: str,
-                        system: str, user: str, schema: dict, validate) -> dict | None:
+                        system: str, user: str, schema: dict, validate,
+                        repair=repair_message) -> dict | None:
     """Llama al proveedor (con reintentos acotados), mide el uso y valida la salida.
 
     Un solo reintento de validación, con los errores a la vista y solo si los límites lo
@@ -252,7 +253,7 @@ def _complete_validated(db: Session, cfg: AiConfig, provider: Provider, analysis
         errors = first.errors
         db.flush()
         if blocked_reason(db, cfg) is None:
-            result2, last_exc = request(user + repair_message(first.errors))
+            result2, last_exc = request(user + repair(first.errors))
             if result2 is not None:
                 meter(result2)
                 try:

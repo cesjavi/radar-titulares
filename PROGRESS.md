@@ -417,6 +417,17 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - Tablas `responsive` en el celular: la celda pasó de flex a grilla (etiqueta a la izquierda, contenido apilado); `/grupos`, `/alertas`, `/fuentes` y `/metricas` se salían de la pantalla.
 - Por pedido del usuario no se corrieron pruebas después de agregar el mapa y hacer pública `/redes` (sí antes, en SQLite y PostgreSQL, con el resto de esta tanda). Sin pruebas propias del mapa todavía.
 
+### Agregado: informes por nombre, por medio, de cambios de titular y resúmenes con IA (2026-10-19)
+- Pestañas en Informes: «Por período o medio», «Por nombre», «Cambios de titular», «Resúmenes».
+- **Por nombre** (`radar/actor_report.py`, `/informes/nombre`): notas del período que nombran a alguien en el titular o la bajada (palabra completa; no en el autor), por medio (réplicas aparte), por día, historias donde aparece, otros nombres en los mismos titulares y un mapa (graph.js) con el nombre en el centro. Tope de 3000 notas leídas; avisa si se llegó.
+- **Por medio**: el informe por período con un medio elegido suma la sección 8 (notas sin coincidencia en otro medio, precisión de fechas, notas firmadas; CSV `propias`).
+- **Cambios de titular** (`headline_changes.change_list`, `/informes/titulares` y CSV): cada nota con sus versiones y qué cambió en cada una, filtrable por medio y tipo de cambio.
+- **Resúmenes con IA** (`radar/ai/summary.py`, migración `0017`: tabla `ai_summaries` y `ai_usage.summary_id`): borrador en prosa escrito solo con los agregados del informe por período (nunca el texto de las notas). La validación rechaza y pide corregir una vez si aparece una cifra que no está en los datos o palabras de origen, copia, coordinación, campaña, sesgo o verdad. Solo un administrador lo genera (respeta límites, cuota y circuit breaker) y lo aprueba; el público ve únicamente los aprobados. Se muestran los datos exactos que recibió la IA. **No se hizo ninguna llamada real**: falta elegir proveedor y autorizar una prueba.
+- `_display_name` (graph.py) exige mayúscula al principio y al final del nombre: «un paso» en una bajada ya no se muestra como el nombre «PASO».
+- Celular: los selectores de los filtros no se salen de la pantalla y las tablas compactas del informe se desplazan dentro de su tarjeta.
+- Verificado a ojo con navegador sin interfaz sobre una copia de la base (sin errores de consola ni desborde a 390 px). Sin pruebas automáticas nuevas, por pedido del usuario.
+- Neon migrado a `0017` el 2026-10-19.
+
 ### Pendiente del despliegue
 - Datos del usuario: acceso SSH, distribución, subdominio, email para el certificado y si ya hay un Nginx.
 - Ejecutar en el VPS, copia de backups fuera del servidor, monitoreo externo de `/salud`, y volver a medir en el VPS.

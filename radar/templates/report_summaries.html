@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Resúmenes · Radar de Titulares{% endblock %}
+{% block content %}
+<div class="report">
+{% include "partials/report_tabs.html" %}
+<h1>Resúmenes</h1>
+<p class="muted">Un texto breve sobre lo que mostró el radar en un período, escrito por la IA <strong>solo con los números y titulares agregados</strong> del informe (nunca con el texto de las notas){% if public_view %} y revisado por una persona antes de publicarse{% else %}. Es un borrador: el público lo ve únicamente si un administrador lo aprueba{% endif %}.</p>
+{% if message %}<p class="alert alert-warn" role="status">{{ message }}</p>{% endif %}
+
+{% if user and user.is_admin %}
+<section class="card no-print">
+  <h2>Generar un borrador</h2>
+  <form method="post" action="/informes/resumenes/generar" class="filters-bar">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label class="filter-item"><span class="filter-label">Desde</span><input type="date" name="desde" value="{{ default_desde.isoformat() }}" max="{{ today.isoformat() }}"></label>
+    <label class="filter-item"><span class="filter-label">Hasta</span><input type="date" name="hasta" value="{{ today.isoformat() }}" max="{{ today.isoformat() }}"></label>
+    <button class="btn" type="submit" {{ 'disabled' if blocked }}>Pedir borrador a la IA</button>
+  </form>
+  {% if blocked %}<p class="small muted">No se puede ahora: {{ blocked }}. La IA se configura en Configuración (es opcional y las llamadas tienen costo).</p>
+  {% else %}<p class="small muted">Hace una llamada al proveedor de IA configurado (tiene costo y respeta los límites diarios). El texto se rechaza y se pide de nuevo una vez si usa una cifra que no está en los datos o si habla de origen, copia, coordinación, sesgo o verdad.</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+  {% if rows %}
+  <table class="table responsive">
+    <thead><tr><th>Resumen</th><th>Período</th><th>Generado</th>{% if not public_view %}<th>Estado</th>{% endif %}</tr></thead>
+    <tbody>{% for r in rows %}{% set out = parsed[r.id] %}<tr>
+      <td data-label="Resumen"><a href="/informes/resumenes/{{ r.id }}">{{ out.titulo or ('Resumen #' ~ r.id) }}</a></td>
+      <td data-label="Período" class="small nowrap">{{ r.period_start | local_dt('%d/%m/%Y') }} – {{ last_day[r.id].strftime('%d/%m/%Y') }}</td>
+      <td data-label="Generado" class="small nowrap">{{ r.created_at | local_dt }}</td>
+      {% if not public_view %}<td data-label="Estado">{% if r.status != 'ok' %}<span class="badge badge-error">{{ r.status }}</span>{% else %}<span class="badge review-{{ r.review_status }}">{{ r.review_status }}</span>{% endif %}</td>{% endif %}
+    </tr>{% endfor %}</tbody>
+  </table>
+  {% else %}
+  <p class="muted">{% if public_view %}Todavía no hay resúmenes publicados.{% else %}Todavía no se generó ningún resumen.{% endif %}</p>
+  {% endif %}
+</section>
+</div>
+{% endblock %}

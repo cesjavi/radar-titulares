@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Cambios de titular · Radar de Titulares{% endblock %}
+{% block content %}
+<div class="report">
+{% include "partials/report_tabs.html" %}
+<h1>Cambios de titular</h1>
+<p class="muted">Notas detectadas del {{ desde.strftime('%d/%m/%Y') }} al {{ hasta.strftime('%d/%m/%Y') }}{% if media_name %} · solo <strong>{{ media_name }}</strong>{% endif %} cuyo titular o bajada cambió después de publicada, con cada versión que vio el radar.</p>
+
+<form method="get" action="/informes/titulares" class="filters-bar no-print">
+  <label class="filter-item"><span class="filter-label">Desde</span><input type="date" name="desde" value="{{ desde.isoformat() }}" max="{{ today.isoformat() }}"></label>
+  <label class="filter-item"><span class="filter-label">Hasta</span><input type="date" name="hasta" value="{{ hasta.isoformat() }}" max="{{ today.isoformat() }}"></label>
+  <label class="filter-item"><span class="filter-label">Medio</span>
+    <select name="medio"><option value="">Todos</option>
+      {% for m in media_options %}<option value="{{ m.slug }}" {{ 'selected' if medio == m.slug }}>{{ m.name }}</option>{% endfor %}
+    </select></label>
+  <label class="filter-item"><span class="filter-label">Qué cambió</span>
+    <select name="categoria"><option value="">Cualquier cambio</option>
+      {% for k, label in data.categories.items() %}<option value="{{ k }}" {{ 'selected' if categoria == k }}>{{ label }}</option>{% endfor %}
+    </select></label>
+  <button class="btn" type="submit">Ver</button>
+  <a class="small" href="/informes/titulares/csv?{{ query }}">Descargar CSV</a>
+  <button class="btn btn-ghost" type="button" data-print>Imprimir o guardar como PDF</button>
+</form>
+{% if error %}<p class="alert alert-error">{{ error }}</p>{% endif %}
+
+<section class="card">
+  <p class="small"><strong>Cómo leerlo.</strong> Cada cambio se compara con la versión anterior con los mismos detectores del motor: una cifra distinta, una negación o un cese que aparece o desaparece, un nombre propio, una reescritura amplia, solo la forma o solo la bajada. Es descriptivo: no dice por qué se cambió ni si la versión anterior estaba mal. La hora es la de detección del radar, que pasa cada tanto: el cambio pudo ser antes.</p>
+</section>
+
+<p><strong>{{ data.total }}</strong> nota{{ 's' if data.total != 1 }} con cambios{% if categoria %} de tipo «{{ data.categories[categoria] | lower }}»{% endif %}.{% if data.truncated %} Se muestran las {{ data['items'] | length }} con el cambio más reciente.{% endif %}</p>
+
+{% for item in data['items'] %}
+<section class="card headline-change">
+  <div class="card-head">
+    <div><span class="media-tag">{{ item.media }}</span> <a href="/noticias/{{ item.article_id }}">Ver la nota en el radar</a> · <a href="{{ item.url }}" rel="noopener noreferrer nofollow" target="_blank">en el medio</a></div>
+    <span class="small muted">primer cambio {{ item.first_change_min }} min después de la primera versión vista</span>
+  </div>
+  <ol class="versions">
+    {% for v in item.versions %}
+    <li>
+      <div class="small muted">{{ v.detected_at | local_dt }}{% for c in v.categories %} <span class="badge badge-change-{{ c }}">{{ data.categories[c] }}</span>{% endfor %}{% if loop.first %} · primera versión vista{% endif %}</div>
+      <div class="{{ 'version-old' if not loop.last }}">{{ v.title }}</div>
+      {% if v.subtitle %}<div class="small muted">{{ v.subtitle }}</div>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% else %}
+<p class="muted">No hay cambios de titular en el período{% if media_name %} para {{ media_name }}{% endif %}{% if categoria %} de ese tipo{% endif %}.</p>
+{% endfor %}
+</div>
+{% endblock %}

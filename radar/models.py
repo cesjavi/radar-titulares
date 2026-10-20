@@ -691,6 +691,30 @@ class AiGroupAnalysis(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
+class AiSummary(Base):
+    """Resumen en prosa de un período, escrito por la IA solo con los agregados del radar (nunca
+    con el texto de las notas). Es un borrador: se publica únicamente si una persona lo aprueba."""
+
+    __tablename__ = "ai_summaries"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    period_start: Mapped[datetime] = mapped_column(DateTime)
+    period_end: Mapped[datetime] = mapped_column(DateTime)
+    input_data: Mapped[str] = mapped_column(Text)  # JSON exacto que se le pasó a la IA
+    provider: Mapped[str] = mapped_column(String(32), default="")
+    model: Mapped[str] = mapped_column(String(128), default="")
+    prompt_version: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16), default="error", index=True)  # ok | invalido | error | rechazado
+    result: Mapped[str | None] = mapped_column(Text)
+    errors: Mapped[str | None] = mapped_column(Text)
+    review_status: Mapped[str] = mapped_column(String(16), default="pendiente",
+                                               server_default="pendiente")
+    reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
 class AiUsage(Base):
     """Registro de cada llamada al proveedor, con el uso que informa el proveedor."""
 
@@ -713,6 +737,7 @@ class AiUsage(Base):
     analysis_id: Mapped[int | None] = mapped_column(ForeignKey("ai_analyses.id", ondelete="SET NULL"))
     group_analysis_id: Mapped[int | None] = mapped_column(
         ForeignKey("ai_group_analyses.id", ondelete="SET NULL"))
+    summary_id: Mapped[int | None] = mapped_column(ForeignKey("ai_summaries.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 

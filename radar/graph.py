@@ -54,7 +54,11 @@ def _display_name(key: str, titles: list[str]) -> str | None:
         norm = [normalize_for_search(w.strip("\"'“”‘’«»:;,.¿?¡!()")) for w in words]
         for i in range(first, len(words) - len(target) + 1):
             if norm[i:i + len(target)] == target:
-                return " ".join(w.strip("\"'“”‘’«»:;,.¿?¡!()") for w in words[i:i + len(target)])
+                found = [w.strip("\"'“”‘’«»:;,.¿?¡!()") for w in words[i:i + len(target)]]
+                # Con mayúscula al principio y al final («Fiscal de Estado», «PASO»): la misma
+                # palabra en minúscula («un paso») no es el nombre.
+                if found[0][:1].isupper() and found[-1][:1].isupper():
+                    return " ".join(found)
     return None
 
 
@@ -71,14 +75,14 @@ class _Graph:
         self.truncated = False
 
     def node(self, nid: str, kind: str, label: str, title: str = "", url: str | None = None,
-             external: bool = False) -> bool:
+             external: bool = False, media: str | None = None) -> bool:
         if nid in self.nodes:
             return True
         if len(self.nodes) >= MAX_NODES:
             self.truncated = True
             return False
         self.nodes[nid] = {"id": nid, "kind": kind, "label": label, "title": title or label,
-                           "url": url, "external": external}
+                           "url": url, "external": external, "media": media}
         return True
 
     def edge(self, source: str, target: str, kind: str, label: str, directed: bool = False) -> None:
@@ -100,12 +104,14 @@ def group_graph(db: Session, group: StoryGroup, articles: list[Article]) -> dict
 
     # Medios y notas (lo primero que entra: el tope de nodos nunca deja afuera a las notas).
     for a in articles:
-        g.node(f"m{a.media_id}", "medio", a.media.name, url=f"/noticias?media={a.media.slug}")
+        g.node(f"m{a.media_id}", "medio", a.media.name, url=f"/noticias?media={a.media.slug}",
+               media=a.media.slug)
     for a in articles:
         when = to_local(a.published_at).strftime("%d/%m %H:%M") if a.published_at else "sin hora"
         extra = " · republicada" if a.is_syndicated else ""
         g.node(f"n{a.id}", "nota", _short(a.title, 40),
-               title=f"{a.media.name} · {when}{extra}: {a.title}", url=f"/noticias/{a.id}")
+               title=f"{a.media.name} · {when}{extra}: {a.title}", url=f"/noticias/{a.id}",
+               media=a.media.slug)
         g.edge(f"m{a.media_id}", f"n{a.id}", "publica", "publicó")
 
     rels = db.scalars(select(ArticleRelation).where(

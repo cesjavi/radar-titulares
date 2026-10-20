@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ data.name ~ ' · ' if data and data.total else '' }}Informe por nombre · Radar de Titulares{% endblock %}
+{% block scripts %}{% if data and data.total %}<script src="{{ url_for('static', path='js/graph.js') }}" defer></script>{% endif %}{% endblock %}
+{% block content %}
+<div class="report">
+{% include "partials/report_tabs.html" %}
+<h1>Informe por nombre</h1>
+<p class="muted">Dónde aparece una persona, organización o lugar en los titulares y bajadas del período (hora de Buenos Aires).</p>
+
+<form method="get" action="/informes/nombre" class="filters-bar no-print">
+  <label class="filter-item report-title-field"><span class="filter-label">Nombre</span><input type="search" name="q" value="{{ q }}" maxlength="80" placeholder="Por ejemplo: Kicillof, Corte Suprema, Rosario" required></label>
+  <label class="filter-item"><span class="filter-label">Desde</span><input type="date" name="desde" value="{{ desde.isoformat() }}" max="{{ today.isoformat() }}"></label>
+  <label class="filter-item"><span class="filter-label">Hasta</span><input type="date" name="hasta" value="{{ hasta.isoformat() }}" max="{{ today.isoformat() }}"></label>
+  <button class="btn" type="submit">Ver informe</button>
+  {% if data and data.total %}<button class="btn btn-ghost" type="button" data-print>Imprimir o guardar como PDF</button>{% endif %}
+</form>
+{% if error %}<p class="alert alert-error">{{ error }}</p>{% endif %}
+
+<section class="card">
+  <p class="small"><strong>Cómo leerlo.</strong> Se busca el nombre como palabra completa en el titular y la bajada de cada nota (no en el autor). Que varias notas lo nombren <strong>no</strong> quiere decir que hablen de lo mismo ni que digan lo mismo: puede haber homónimos, y una nota que trata el tema sin nombrarlo en el titular no aparece. Las réplicas de agencias no cuentan como medio independiente. Publicar antes no indica que un medio origine nada.</p>
+</section>
+
+{% if data %}
+{% if data.too_short %}
+<p class="alert alert-warn">Escribí al menos 3 letras.</p>
+{% elif not data.total %}
+<p class="muted">Ninguna nota del período nombra a «{{ data.query }}» en el titular o la bajada.</p>
+{% else %}
+<h2>{{ data.name }} <span class="small muted">· del {{ desde.strftime('%d/%m/%Y') }} al {{ hasta.strftime('%d/%m/%Y') }}</span></h2>
+{% if data.capped %}<p class="alert alert-warn">Hay muchas notas con ese texto: se miraron las 3000 más recientes. Acotá el período para un resultado completo.</p>{% endif %}
+<div class="stats">
+  <div class="stat stat-primary"><span class="stat-value">{{ data.total }}</span><span class="stat-label">Notas que lo nombran</span></div>
+  <div class="stat"><span class="stat-value">{{ data.independent_media }}</span><span class="stat-label">Medios independientes</span></div>
+  <div class="stat"><span class="stat-value">{{ data.groups_total }}</span><span class="stat-label">Historias (grupos) donde aparece</span></div>
+</div>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Por medio</h2>
+    {% set mmax = data.media | map(attribute='own') | max %}
+    <table class="table compact">
+      <thead><tr><th>Medio</th><th class="num">Notas propias</th><th class="num">Réplicas</th><th class="bar-col"></th></tr></thead>
+      <tbody>{% for m in data.media %}<tr><td>{{ m.name }}</td><td class="num">{{ m.own }}</td><td class="num">{{ m.syndicated }}</td>
+        <td class="bar-col"><svg class="bar" viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="{{ m.own }} notas propias"><rect width="{{ (100 * m.own / mmax) if mmax else 0 }}" height="10"></rect></svg></td></tr>{% endfor %}</tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Otros nombres en los mismos titulares</h2>
+    {% if data.names %}
+    <ul class="compact-list">{% for n in data.names %}<li><a href="/informes/nombre?{{ {'q': n.name, 'desde': desde.isoformat(), 'hasta': hasta.isoformat()} | urlencode }}">{{ n.name }}</a> <span class="small muted">· {{ n.notes }} titulares</span></li>{% endfor %}</ul>
+    <p class="small muted">Detección automática por mayúsculas: puede incluir palabras que no son nombres o perder alguno. Aparecer juntos en un titular no dice qué relación tienen.</p>
+    {% else %}<p class="muted small">No hay otros nombres que se repitan en al menos dos titulares.</p>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Por día <span class="small muted">· notas detectadas</span></h2>
+  {% set dmax = data.days | map(attribute='count') | max %}
+  <svg class="activity-chart" viewBox="0 0 {{ data.days | length * 10 }} 64" preserveAspectRatio="none" role="img" aria-label="Notas por día">
+    {% for d in data.days %}{% set i = loop.index0 %}
+    <g class="activity-col"><title>{{ d.day[8:10] }}/{{ d.day[5:7] }}: {{ d.count }} nota{{ 's' if d.count != 1 }}</title>
+      <rect class="activity-hit" x="{{ i * 10 }}" y="0" width="10" height="64"></rect>
+      {% if d.count %}{% set h = [2, 60 * d.count / dmax] | max %}<rect class="activity-bar" x="{{ i * 10 + 1 }}" y="{{ 63 - h }}" width="8" height="{{ h }}"></rect>{% endif %}
+    </g>{% endfor %}
+    <line class="activity-base" x1="0" y1="63.5" x2="{{ data.days | length * 10 }}" y2="63.5"></line>
+  </svg>
+  <div class="activity-axis small muted"><span>{{ desde.strftime('%d/%m') }}</span><span>{{ hasta.strftime('%d/%m') }}</span></div>
+</section>
+
+<section class="card" id="grafo">
+  <h2>Mapa</h2>
+  <p class="small muted">En el centro, {{ data.name }}; alrededor, los medios que lo nombran (con cuántas notas) y los otros nombres que aparecen en los mismos titulares. Todo con líneas: nombrar o aparecer juntos no tiene dirección.</p>
+  <div class="graph-box" data-graph-url="/informes/nombre/grafo?{{ query }}">
+    <p class="small muted graph-status" role="status">Cargando el mapa…</p>
+  </div>
+  <details class="graph-list small"><summary>Ver las conexiones como lista</summary><ul></ul></details>
+</section>
+
+{% if data.groups %}
+<section class="card">
+  <h2>Historias donde aparece</h2>
+  <table class="table responsive">
+    <thead><tr><th>Historia</th><th class="num">Medios independientes</th><th class="num">Notas que lo nombran</th><th>Primera detección</th></tr></thead>
+    <tbody>{% for g in data.groups %}<tr>
+      <td data-label="Historia"><a href="/grupos/{{ g.id }}">{{ g.title }}</a></td>
+      <td data-label="Medios" class="num">{{ g.independent }}</td>
+      <td data-label="Notas" class="num">{{ g.notes }}</td>
+      <td data-label="Detección" class="small nowrap">{{ g.first_seen | iso_dt }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% if data.groups_total > data.groups | length %}<p class="small muted">Se muestran {{ data.groups | length }} de {{ data.groups_total }}.</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Notas <span class="small muted">· las {{ data.notes | length }} más recientes{% if data.total > data.notes | length %} de {{ data.total }}{% endif %}</span></h2>
+  <ul class="compact-list">{% for n in data.notes %}<li><span class="media-tag">{{ n.media }}</span> <a href="/noticias/{{ n.id }}">{{ n.title }}</a>{% if n.syndicated %} <span class="badge badge-syndicated">republicada</span>{% endif %} <span class="small muted">· {{ n.first_seen | iso_dt }}</span></li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% endif %}
+</div>
+{% endblock %}

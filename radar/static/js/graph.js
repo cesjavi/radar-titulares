@@ -64,6 +64,44 @@
     }
   }
 
+  // Ubica cada rótulo debajo, arriba, a la derecha o a la izquierda de su nodo, en el primer lugar
+  // que no pise otro rótulo ni otro nodo. Si no hay lugar, el rótulo queda para el mouse. El ancho
+  // se estima (11px de fuente) para no depender de que el SVG ya esté en la página.
+  function placeLabels(nodes, shown) {
+    var PRIORITY = {medio: 0, actor: 1, cuenta: 2, nota: 3, posteo: 4};
+    var boxes = [];
+    function hits(b) {
+      for (var i = 0; i < boxes.length; i++) {
+        var o = boxes[i];
+        if (b.x1 < o.x2 && b.x2 > o.x1 && b.y1 < o.y2 && b.y2 > o.y1) return true;
+      }
+      return false;
+    }
+    nodes.forEach(function (d) {  // los círculos también ocupan lugar
+      var r = (RADIUS[d.kind] || 6) + 1;
+      boxes.push({x1: d.x - r, y1: d.y - r, x2: d.x + r, y2: d.y + r});
+    });
+    nodes.filter(function (d) { return shown(d); })
+      .sort(function (a, b) { return PRIORITY[a.kind] - PRIORITY[b.kind]; })
+      .forEach(function (d) {
+        var r = RADIUS[d.kind] || 6, w = d.label.length * 6.2, h = 13;
+        var spots = [
+          {x: d.x, y: d.y + r + 12, anchor: "middle", x1: d.x - w / 2, y1: d.y + r + 2},
+          {x: d.x, y: d.y - r - 5, anchor: "middle", x1: d.x - w / 2, y1: d.y - r - 15},
+          {x: d.x + r + 4, y: d.y + 4, anchor: "start", x1: d.x + r + 4, y1: d.y - 7},
+          {x: d.x - r - 4, y: d.y + 4, anchor: "end", x1: d.x - r - 4 - w, y1: d.y - 7}
+        ];
+        d.labelPos = null;
+        for (var i = 0; i < spots.length; i++) {
+          var s = spots[i], b = {x1: s.x1, y1: s.y1, x2: s.x1 + w, y2: s.y1 + h};
+          if (b.x1 < 0 || b.x2 > W || b.y1 < 0 || b.y2 > H || hits(b)) continue;
+          boxes.push(b);
+          d.labelPos = s;
+          return;
+        }
+      });
+  }
+
   function draw(box, data) {
     var nodes = data.nodes, edges = data.edges;
     if (nodes.length < 2) {
@@ -73,6 +111,7 @@
     layout(nodes, edges);
     // En un mapa chico entran también los títulos de las notas; en uno grande, al pasar el mouse.
     var labelAll = nodes.length <= 16;
+    placeLabels(nodes, function (d) { return d.label && (LABELED[d.kind] || labelAll); });
     var byId = {};
     nodes.forEach(function (d) { byId[d.id] = d; });
 
@@ -106,11 +145,13 @@
       var wrap = d.url ? el("a", {href: d.url}, gNodes) : el("g", {}, gNodes);
       wrap.setAttribute("class", "g-item");
       var c = el("circle", {cx: d.x.toFixed(1), cy: d.y.toFixed(1), r: RADIUS[d.kind] || 6,
-                            "class": "g-node g-" + d.kind + (d.external ? " g-external" : "")}, wrap);
+                            "class": "g-node g-" + d.kind + (d.external ? " g-external" : "") +
+                                     (d.media ? " g-m-" + d.media : "")}, wrap);
       el("title", {}, c).textContent = KIND_NAMES[d.kind] + ": " + d.title;
-      var label = el("text", {x: d.x.toFixed(1), y: (d.y + (RADIUS[d.kind] || 6) + 12).toFixed(1),
-                              "text-anchor": "middle",
-                              "class": "g-label" + (LABELED[d.kind] || (labelAll && d.label) ? "" : " g-label-hover")}, wrap);
+      // Sin lugar libre, el rótulo va debajo y aparece solo al pasar el mouse.
+      var pos = d.labelPos || {x: d.x, y: d.y + (RADIUS[d.kind] || 6) + 12, anchor: "middle"};
+      var label = el("text", {x: pos.x.toFixed(1), y: pos.y.toFixed(1), "text-anchor": pos.anchor,
+                              "class": "g-label" + (d.labelPos ? "" : " g-label-hover")}, wrap);
       label.textContent = d.label;
       d.wrap = wrap;
       // Al pasar el mouse (o con el foco del teclado) se resaltan el nodo y sus conexiones.
