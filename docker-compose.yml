@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: radar_titulares_app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - RADAR_AI_ENABLED=false
+      # Agrega aquí tus variables de entorno o usa un archivo .env externo
+    # volumes:
+    #   - .:/app # Descomenta esto solo si quieres desarrollo en tiempo real (hot-reload)
