@@ -366,6 +366,7 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
 
 .nav-toggle, .nav-toggle-label { display: none; }
 @media (max-width: 860px) {
+  .topbar { flex-wrap: wrap; padding: 8px 14px; }
   .nav-toggle-label {
     display: block;
     margin-left: auto;
@@ -375,6 +376,7 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
   }
   .nav {
     display: none;
+    flex: 1 1 100%;
     width: 100%;
     margin-left: 0;
     margin-top: 10px;
@@ -386,8 +388,34 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
   }
   .nav-primary { flex-direction: column; align-items: stretch; }
   .nav-secondary { flex-direction: column; align-items: stretch; }
-  .nav-dropdown-menu { position: static; box-shadow: none; border: 0; padding-left: 12px; }
-  .nav-toggle:checked ~ .nav { display: flex; }
+  .nav-link { padding: 10px 14px; }
+  /* En el celular no hay hover: «Herramientas» queda como título y sus enlaces siempre a la vista. */
+  .nav-dropdown-btn { border: 0; padding: 4px 14px; pointer-events: none; text-transform: uppercase; font-size: .75rem; letter-spacing: .04em; }
+  .nav-dropdown-menu { display: block; position: static; box-shadow: none; border: 0; padding: 0; margin: 0; }
+  .nav-dropdown-menu a { padding: 10px 14px; font-size: .92rem; }
+  .nav-secondary { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+  .nav-dropdown { flex: 1 1 100%; }
+  .nav-toggle:checked ~ .nav { display: flex; max-height: calc(100vh - 60px); overflow-y: auto; }
+}
+@media (max-width: 600px) {
+  :root { --gap: 14px; }
+  h1 { font-size: 1.4rem; }
+  .hero-title { font-size: 1.45rem; }
+  .public-banner { font-size: .78rem; padding: 6px var(--gap); }
+  /* 16px evita que iOS acerque la página al tocar un campo. */
+  input, select, textarea { font-size: 16px; }
+  .filters { gap: 10px; padding: 12px; }
+  .filters label { flex: 1 1 calc(50% - 5px); min-width: 0; }
+  .filters .grow, .filters label.inline { flex-basis: 100%; }
+  .filters .btn { flex: 1 1 100%; justify-content: center; }
+  .filter-item { flex-wrap: wrap; }
+  .filter-reset { margin-left: 0; }
+  .group-card { padding: 14px; }
+  .btn { padding: 10px 16px; }
+  .btn-small { padding: 6px 10px; }
+  .pager { flex-wrap: wrap; }
+  /* Tablas sin versión apilada: se desplazan dentro de su caja, no la página. */
+  .table:not(.responsive) { display: block; overflow-x: auto; }
 }
 
 /* ==========================================================================
@@ -418,7 +446,7 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
 
 .grid-2 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: var(--gap);
 }
 
@@ -439,7 +467,7 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
 /* Stats cards */
 .stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
   gap: 14px;
   margin-bottom: var(--gap);
 }
@@ -483,7 +511,7 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
    ========================================================================== */
 .groups-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
   gap: 16px;
   margin-top: 14px;
 }
@@ -825,11 +853,12 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
   /* Etiqueta a la izquierda y todo el contenido de la celda apilado a la derecha (con flex, cada
      hijo quedaba al lado del anterior y la tabla se salía de la pantalla). */
   .table.responsive td {
-    display: grid; grid-template-columns: 110px minmax(0, 1fr); column-gap: 12px;
+    display: grid; grid-template-columns: 92px minmax(0, 1fr); column-gap: 10px;
     border: 0; padding: 3px 0; text-align: left; overflow-wrap: anywhere;
   }
   .table.responsive td::before { content: attr(data-label); grid-column: 1; grid-row: 1 / span 30; color: var(--muted); font-size: .8rem; font-weight: 600; }
   .table.responsive td > * { grid-column: 2; min-width: 0; }
+  .table.responsive td > .badge { justify-self: start; }
   .nowrap { white-space: normal; }
 }
 
