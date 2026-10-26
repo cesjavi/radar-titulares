@@ -8,7 +8,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
 from radar.alerts import common_source
@@ -294,6 +294,9 @@ def update_alerts(db: Session, now=None) -> AlertSummary:
         summary.updated += 1
         if alert.status in ("pendiente", "revisada"):
             summary.queued += _maybe_notify(db, alert, cfg, now)
+    # Revisadas por defecto: las pendientes que nadie dejó así a mano (anteriores al cambio).
+    db.execute(update(Alert).where(Alert.status == "pendiente", Alert.reviewed_by_id.is_(None))
+               .values(status="revisada"))
     _close_orphans(db, now)
     db.flush()
     log.info("Alertas: %s", summary)

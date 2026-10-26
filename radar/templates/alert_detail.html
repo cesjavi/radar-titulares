@@ -49,7 +49,8 @@
         <td data-label="Relación"><a href="/relaciones/{{ r.id }}">{{ r.tipo_texto }}</a></td>
         <td data-label="Puntaje" class="num">{{ '%.2f' | format(r.puntaje or 0) }}</td>
         <td data-label="Reglas" class="small">{{ r.reglas | join(', ') }}</td>
-        <td data-label="Revisión"><span class="badge review-{{ r.revision }}">{{ r.revision }}</span></td>
+        {% set rev = 'revisada' if r.revision in (none, 'pendiente') else r.revision %}
+        <td data-label="Revisión"><span class="badge review-{{ rev }}">{{ rev }}</span></td>
       </tr>
     {% endfor %}
     </tbody>
@@ -76,7 +77,7 @@
       {% for s in statuses %}{% if s != alert.status %}<button type="submit" name="status" value="{{ s }}" class="btn {{ '' if s == 'revisada' else 'btn-ghost' }}">Marcar {{ s }}</button>{% endif %}{% endfor %}
     </div>
   </form>
-  <p class="small muted">Una alerta revisada vuelve a «pendiente» si llega evidencia nueva relevante (otro medio, mayor prioridad, frases nuevas). Las descartadas y silenciadas no se reabren solas.</p>
+  <p class="small muted">Las alertas quedan revisadas por defecto y la evidencia nueva no las reabre. Las descartadas y silenciadas tampoco se reabren solas.</p>
 </section>
 {% endif %}
 
