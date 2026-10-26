@@ -40,7 +40,7 @@ def test_one_alert_per_group_and_no_duplicates(db, media):
     s1 = analyze(db)
     assert s1.created == 1
     alert = db.scalar(select(Alert))
-    assert alert.status == "pendiente" and alert.independent_media_count == 3
+    assert alert.status == "revisada" and alert.independent_media_count == 3
     assert alert.version == 1
     s2 = analyze(db)
     assert s2.created == 0 and s2.updated == 0 and s2.unchanged == 1
@@ -114,7 +114,7 @@ def test_silenced_topic_excluded_terms_and_sections(db, media):
     assert s.created == 0 and "sección excluida" in s.reasons
 
 
-def test_material_update_reopens_reviewed_alert(db, media, admin):
+def test_material_update_keeps_reviewed_alert(db, media, admin):
     a, b, c = seed_story(db, media)
     # Primero solo dos medios.
     c.first_seen_at = utcnow() - timedelta(days=30)  # fuera de la ventana
@@ -131,10 +131,10 @@ def test_material_update_reopens_reviewed_alert(db, media, admin):
     s = analyze(db)
     db.refresh(alert)
     assert s.updated == 1
-    assert alert.version == 2 and alert.status == "pendiente"
+    assert alert.version == 2 and alert.status == "revisada"
     upd = [e for e in alert.events if e.event == "actualizada"][-1]
     detail = json.loads(upd.detail)
-    assert detail["reabierta"] and detail["cambios"]["medios_agregados"]
+    assert not detail["reabierta"] and detail["cambios"]["medios_agregados"]
     # Una descartada no se reabre sola.
     set_status(db, alert, "descartada", user, None)
     db.commit()

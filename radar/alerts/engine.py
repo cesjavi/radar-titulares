@@ -250,7 +250,7 @@ def update_alerts(db: Session, now=None) -> AlertSummary:
         )
         if alert is None:
             alert = Alert(alert_type="coincidencia_grupo", group_id=group.id,
-                          status="silenciada" if silenced else "pendiente",
+                          status="silenciada" if silenced else "revisada",
                           fingerprint=result["fingerprint"], version=1, created_at=now,
                           updated_at=now, last_material_change_at=now, **payload)
             db.add(alert)
@@ -267,7 +267,7 @@ def update_alerts(db: Session, now=None) -> AlertSummary:
         for k, v in payload.items():
             setattr(alert, k, v)
         alert.updated_at = now
-        if silenced and alert.status == "pendiente":
+        if silenced and _untouched(alert):
             alert.status = "silenciada"
         if alert.fingerprint == result["fingerprint"]:
             summary.unchanged += 1  # cambio irrelevante: sin evento ni notificación
@@ -287,14 +287,12 @@ def update_alerts(db: Session, now=None) -> AlertSummary:
             continue
         alert.version += 1
         alert.last_material_change_at = now
-        reopened = alert.status == "revisada"
-        if reopened:
-            alert.status = "pendiente"  # hay evidencia nueva: vuelve a revisión
+        # Las alertas quedan revisadas por defecto: la evidencia nueva no las reabre.
         db.add(AlertEvent(alert_id=alert.id, event="actualizada", created_at=now,
                           detail=json.dumps({"material": material, "cambios": changes,
-                                             "reabierta": reopened}, ensure_ascii=False)))
+                                             "reabierta": False}, ensure_ascii=False)))
         summary.updated += 1
-        if alert.status == "pendiente":
+        if alert.status in ("pendiente", "revisada"):
             summary.queued += _maybe_notify(db, alert, cfg, now)
     _close_orphans(db, now)
     db.flush()
@@ -302,22 +300,31 @@ def update_alerts(db: Session, now=None) -> AlertSummary:
     return summary
 
 
+def _untouched(alert: Alert) -> bool:
+    """Pendiente, o revisada por defecto (sin revisión humana)."""
+    return alert.status == "pendiente" or (alert.status == "revisada"
+                                           and alert.reviewed_by_id is None)
+
+
 def _close_orphans(db: Session, now) -> None:
-    """Una alerta por historia: si su grupo se unió a otro o quedó vacío, la alerta pendiente
-    se cierra (queda en el historial) para no duplicar la del grupo que sigue abierto."""
+    """Una alerta por historia: si su grupo se unió a otro o quedó vacío, la alerta que nadie
+    revisó a mano se cierra (queda en el historial) para no duplicar la del grupo abierto."""
     rows = db.execute(
         select(Alert, StoryGroup).join(StoryGroup, StoryGroup.id == Alert.group_id)
-        .where(Alert.status == "pendiente", StoryGroup.status != "open")).all()
+        .where(Alert.status.in_(("pendiente", "revisada")), StoryGroup.status != "open")).all()
     for alert, group in rows:
+        if not _untouched(alert):
+            continue
         if group.status == "merged" and group.merged_into_id:
             note = f"Cerrada automáticamente: el grupo se unió al grupo #{group.merged_into_id}."
         else:
             note = "Cerrada automáticamente: el grupo quedó sin notas."
+        previous = alert.status
         alert.status = "descartada"
         alert.review_note = note
         alert.updated_at = now
         db.add(AlertEvent(alert_id=alert.id, event="estado", created_at=now,
-                          detail=json.dumps({"de": "pendiente", "a": "descartada", "nota": note,
+                          detail=json.dumps({"de": previous, "a": "descartada", "nota": note,
                                              "automatico": True}, ensure_ascii=False)))
 
 

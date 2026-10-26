@@ -96,7 +96,7 @@ def _pages(total: int, page: int) -> tuple[int, int]:
 
 
 @router.get("/alertas")
-def alert_list(request: Request, estado: str = Query("pendiente", max_length=16),
+def alert_list(request: Request, estado: str = Query("todas", max_length=16),
                prioridad: str = Query("", max_length=8), q: str = Query("", max_length=100),
                min_medios: int = Query(0, ge=0, le=20), orden: str = Query("", max_length=16),
                page: int = Query(1, ge=1, le=10000),

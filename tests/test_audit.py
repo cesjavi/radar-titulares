@@ -36,7 +36,7 @@ def test_merging_groups_does_not_leave_duplicate_pending_alerts(db, media, admin
     db.commit()
     update_alerts(db)
     db.commit()
-    pending = db.scalars(select(Alert).where(Alert.status == "pendiente")).all()
+    pending = db.scalars(select(Alert).where(Alert.status == "revisada")).all()
     assert len(pending) == 1 and pending[0].group_id == groups[0].id
     closed = db.scalar(select(Alert).where(Alert.group_id == groups[1].id))
     assert closed.status == "descartada" and "unió" in closed.review_note
