@@ -18,7 +18,7 @@
   <td data-label="Cobertura" class="small">
     {% if cov and cov.total %}{{ cov.level }}<div class="muted">bajada {{ cov.pct(cov.with_subtitle) }}% · cuerpo {{ cov.pct(cov.with_body) }}%</div>{% else %}—{% endif %}
   </td>
-  <td data-label="">
+  <td data-label="" class="row-actions">
     {% if user and user.is_admin and s.kind != 'demo' %}
     <form class="inline-form" hx-post="/fuentes/subfuente/{{ s.id }}/intervalo" hx-target="#sub-{{ s.id }}" hx-swap="outerHTML">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

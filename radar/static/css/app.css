@@ -622,6 +622,7 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
   padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid currentColor;
+  white-space: nowrap;
 }
 .badge-media-count {
   background: var(--surface-alt);
@@ -698,7 +699,13 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
 .mt-4 { margin-top: 4px; }
 .mb-4 { margin-bottom: 4px; }
 .mt-8 { margin-top: 8px; }
-.input-minutes { width: 5em; }
+.input-minutes { width: 5em; padding: 4px 8px; }
+.error-text { color: var(--error); }
+.break { overflow-wrap: anywhere; }
+.inline-form { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; }
+.inline-form label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.row-actions { min-width: 190px; }
+.row-actions > * { margin: 0 0 6px; }
 .legend-gap { margin-left: 12px; }
 
 /* Portada: hoy, pendientes, cómo leer, temas en alza */
@@ -858,7 +865,7 @@ code.token-value { display: inline-block; word-break: break-all; user-select: al
   }
   .table.responsive td::before { content: attr(data-label); grid-column: 1; grid-row: 1 / span 30; color: var(--muted); font-size: .8rem; font-weight: 600; }
   .table.responsive td > * { grid-column: 2; min-width: 0; }
-  .table.responsive td > .badge { justify-self: start; }
+  .table.responsive td > .badge, .table.responsive td > .btn { justify-self: start; }
   .nowrap { white-space: normal; }
 }
 
