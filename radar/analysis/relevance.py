@@ -1,7 +1,7 @@
 """Orden del resumen por interés probable, aprendido de lo que se hace en el panel.
 
 Señales (compartidas por todo el panel, no por persona):
-- interés: notas abiertas al menos una vez (clics);
+- interés: notas abiertas en la ficha o en el sitio original, deduplicadas por persona y día;
 - desinterés: notas ocultas a mano, notas de grupos ocultos y notas con términos excluidos
   del resumen. Si una nota tiene las dos señales, manda el desinterés (es explícito).
 
@@ -20,7 +20,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from radar.analysis.textproc import content_tokens
-from radar.models import AppSetting, Article, StoryGroup, StoryGroupMember
+from radar.models import AppSetting, Article, ArticleInteraction, StoryGroup, StoryGroupMember
 from radar.text import excluded_terms_pattern, normalize_for_search
 from radar.timeutil import utcnow
 
@@ -28,7 +28,7 @@ SETTING_KEY = "relevance_model"
 MIN_EXAMPLES = 10  # por clase; con menos el orden sería ruido
 MIN_TOKEN_COUNT = 2
 MAX_TOKENS = 2000
-MODEL_VERSION = 1
+MODEL_VERSION = 2
 
 
 def _features(title: str | None, subtitle: str | None) -> set[str]:
@@ -40,18 +40,26 @@ def training_examples(db: Session) -> tuple[list[set[str]], list[set[str]]]:
     hidden_groups = (select(StoryGroupMember.article_id).join(StoryGroup)
                      .where(StoryGroup.hidden_at.is_not(None),
                             StoryGroupMember.status == "activo"))
+    interested = (select(ArticleInteraction.article_id)
+                  .where(ArticleInteraction.event.in_(("detalle", "original"))))
+    interaction_ids = set(db.scalars(interested))
+    interest_condition = (Article.id.in_(interaction_ids) if interaction_ids
+                          else Article.clicks > 0)
     rows = db.execute(
         select(Article.id, Article.title, Article.subtitle, Article.clicks, Article.hidden_at,
                Article.id.in_(hidden_groups))
         .where(Article.is_demo.is_(False),
-               or_(Article.clicks > 0, Article.hidden_at.is_not(None),
+               or_(interest_condition, Article.hidden_at.is_not(None),
                    Article.id.in_(hidden_groups)))).all()
     pos, neg = [], []
-    for _id, title, subtitle, clicks, hidden_at, in_hidden_group in rows:
+    for article_id, title, subtitle, clicks, hidden_at, in_hidden_group in rows:
         feats = _features(title, subtitle)
         if not feats:
             continue
-        (neg if hidden_at is not None or in_hidden_group else pos).append(feats)
+        if hidden_at is not None or in_hidden_group:
+            neg.append(feats)
+        elif article_id in interaction_ids or (not interaction_ids and clicks > 0):
+            pos.append(feats)
     # Los términos excluidos del resumen marcan desinterés en notas sin otra señal.
     pattern = excluded_terms_pattern(_setting(db, "summary_excluded_terms"))
     if pattern is not None:

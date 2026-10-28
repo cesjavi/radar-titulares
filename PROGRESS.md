@@ -434,7 +434,7 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 
 ### Pendiente
 - [ ] Probar Groq y Fireworks con una llamada real controlada (`ai-analyze --limit 1`) cuando el usuario elija modelos y lo autorice.
-- [ ] Coincidencia de temas por palabra completa (hoy se busca por subcadena).
+- [x] Coincidencia de temas por palabra completa (`search_tokens`, migración `0019`).
 - [x] Alta de medios y subfuentes desde el panel (adaptador genérico + descubrimiento de feeds).
 - [ ] Edición y baja de medios agregados desde el panel; `probe` para medios genéricos.
 - [x] Ajustes de IA, recolección, retención, vista pública y Telegram editables desde el panel.
@@ -451,3 +451,12 @@ Se inspeccionó el código y se comprobó el comportamiento con pruebas y con da
 - Las alertas heredan los límites del motor léxico: la prioridad alta por "expresión compartida" puede deberse a una fuente común no detectada.
 - Telegram se probó solo con un transporte simulado; no se enviaron mensajes reales.
 - Por ahora todo se prueba en local (pedido del usuario). No se probó detrás de un proxy HTTPS real, ni en el VPS.
+
+### Corrección estadística y de procedencia (2026-10-27)
+- Motor `lexico-1.2`: temas y búsquedas estructuradas usan palabras completas; se evita que una subcadena active otro término.
+- Los cambios de titular se comparan dentro de la misma subfuente. Las variantes simultáneas entre RSS, portada o sitemap se informan aparte y no se cuentan como reescrituras.
+- La evaluación queda versionada por relación, persona y algoritmo; separa revisiones operativas de la muestra, pondera por población de cada estrato, calcula un intervalo estratificado cuando alcanza la muestra y muestra acuerdo y kappa. Suma una auditoría separada y versionada de posibles omisiones: congela al primer acceso un universo de pares recientes no relacionados, estratificados por similitud superficial y ponderados por su población. Esa tasa busca falsos negativos en un universo acotado y no se presenta como exhaustividad global; sus intervalos son aproximados porque distintos pares pueden compartir notas.
+- Tendencias compara la ventana actual con la misma franja horaria de al menos siete días anteriores y excluye réplicas. Los informes incluyen grupos con actividad en el período y solo sus notas de ese período.
+- Métricas agrega cobertura persistente de recolección, coberturas direccionales, coincidencia esperada por volumen, mediana temporal firmada e intervalos de Wilson. Ninguna se presenta como causalidad o coordinación.
+- El orden por interés registra exposiciones, posición, ficha, original y ocultamiento, deduplicados por persona y día. El modelo deja de usar el contador bruto cuando existen señales instrumentadas; Métricas muestra la tasa observada por posición con intervalos de Wilson para hacer visible el sesgo de exposición.
+- Migración `0019`: `search_tokens`, procedencia de versiones de titular, etiquetas versionadas, auditoría de omisiones, agregados diarios e interacciones. El formato de informes pasa a versión 2.

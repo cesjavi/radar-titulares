@@ -93,6 +93,7 @@ class MediaChanges:
     articles: int = 0  # notas del período
     changed: int = 0  # notas con al menos un cambio de titular o bajada
     changes: int = 0
+    cross_source_variants: int = 0
     by_category: Counter = field(default_factory=Counter)
     first_change_min: list[float] = field(default_factory=list)
 
@@ -106,10 +107,16 @@ class MediaChanges:
 
 
 def transitions(versions: list[HeadlineVersion]) -> dict[int, list[str]]:
-    """Categorías de cada versión de feed respecto de la anterior (id de versión → categorías)."""
+    """Cambios dentro de una misma subfuente; no mezcla RSS, sitemap y portada."""
     feed = sorted((v for v in versions if v.origin == "feed"), key=lambda v: (v.detected_at, v.id))
-    return {cur.id: classify(prev.title, prev.subtitle, cur.title, cur.subtitle)
-            for prev, cur in zip(feed, feed[1:])}
+    previous: dict[int | None, HeadlineVersion] = {}
+    out = {}
+    for current in feed:
+        prev = previous.get(current.subsource_id)
+        if prev is not None:
+            out[current.id] = classify(prev.title, prev.subtitle, current.title, current.subtitle)
+        previous[current.subsource_id] = current
+    return out
 
 
 def change_stats(db: Session, days: int = 30, include_demo: bool = False,
@@ -136,27 +143,35 @@ def change_stats(db: Session, days: int = 30, include_demo: bool = False,
                    .group_by(HeadlineVersion.article_id).having(func.count() > 1))
     rows = db.execute(
         select(HeadlineVersion.article_id, Article.media_id, HeadlineVersion.title,
-               HeadlineVersion.subtitle, HeadlineVersion.detected_at, HeadlineVersion.id)
+               HeadlineVersion.subtitle, HeadlineVersion.detected_at, HeadlineVersion.id,
+               HeadlineVersion.subsource_id)
         .join(Article, Article.id == HeadlineVersion.article_id)
         .where(HeadlineVersion.origin == "feed", HeadlineVersion.article_id.in_(changed_ids))
         .order_by(HeadlineVersion.article_id, HeadlineVersion.detected_at, HeadlineVersion.id))
     by_article: dict[int, list] = defaultdict(list)
     media_of: dict[int, int] = {}
-    for aid, mid, title, sub, detected, _vid in rows:
-        by_article[aid].append((title, sub, detected))
+    for aid, mid, title, sub, detected, _vid, source_id in rows:
+        by_article[aid].append((title, sub, detected, source_id))
         media_of[aid] = mid
     for aid, vs in by_article.items():
         st = per_media.setdefault(media_of[aid], MediaChanges(names.get(media_of[aid], "?")))
         cats_seen = False
-        for (pt, ps, pd), (ct, cs, cd) in zip(vs, vs[1:]):
-            cats = classify(pt, ps, ct, cs)
-            if not cats:
-                continue
-            if not cats_seen:
-                st.first_change_min.append((cd - vs[0][2]).total_seconds() / 60)
-                cats_seen = True
-            st.changes += 1
-            st.by_category.update(cats)
+        sources: dict[int | None, list] = defaultdict(list)
+        for version in vs:
+            sources[version[3]].append(version)
+        variants = {(title, subtitle or "") for title, subtitle, _detected, _source in vs}
+        if len(sources) > 1 and len(variants) > 1:
+            st.cross_source_variants += 1
+        for source_versions in sources.values():
+            for (pt, ps, pd, _), (ct, cs, cd, _) in zip(source_versions, source_versions[1:]):
+                cats = classify(pt, ps, ct, cs)
+                if not cats:
+                    continue
+                if not cats_seen:
+                    st.first_change_min.append((cd - source_versions[0][2]).total_seconds() / 60)
+                    cats_seen = True
+                st.changes += 1
+                st.by_category.update(cats)
         if cats_seen:
             st.changed += 1
     totals = Counter()
@@ -184,33 +199,44 @@ def change_list(db: Session, since: datetime, until: datetime, media_id: int | N
     names = dict(db.execute(select(Media.id, Media.name)).all())
     rows = db.execute(
         select(HeadlineVersion.article_id, Article.media_id, Article.url, HeadlineVersion.title,
-               HeadlineVersion.subtitle, HeadlineVersion.detected_at)
+               HeadlineVersion.subtitle, HeadlineVersion.detected_at,
+               HeadlineVersion.subsource_id)
         .join(Article, Article.id == HeadlineVersion.article_id)
         .where(HeadlineVersion.origin == "feed", HeadlineVersion.article_id.in_(changed_ids))
         .order_by(HeadlineVersion.article_id, HeadlineVersion.detected_at, HeadlineVersion.id))
     by_article: dict[int, list] = defaultdict(list)
     info: dict[int, tuple[int, str]] = {}
-    for aid, mid, url, title, sub, detected in rows:
-        by_article[aid].append((title, sub, detected))
+    for aid, mid, url, title, sub, detected, source_id in rows:
+        by_article[aid].append((title, sub, detected, source_id))
         info[aid] = (mid, url)
     items = []
     for aid, vs in by_article.items():
-        versions = [{"title": vs[0][0], "subtitle": vs[0][1], "detected_at": vs[0][2],
-                     "categories": []}]
+        sources: dict[int | None, list] = defaultdict(list)
+        for version in vs:
+            sources[version[3]].append(version)
+        versions = []
         seen: set[str] = set()
-        for (pt, ps, _pd), (ct, cs, cd) in zip(vs, vs[1:]):
-            cats = classify(pt, ps, ct, cs)
-            if not cats:
-                continue  # misma versión vista de nuevo
-            seen.update(cats)
-            versions.append({"title": ct, "subtitle": cs, "detected_at": cd, "categories": cats})
-        if len(versions) < 2 or (category and category not in seen):
+        first_change = None
+        for source_id, source_versions in sources.items():
+            for (pt, ps, _pd, _), (ct, cs, cd, _) in zip(source_versions, source_versions[1:]):
+                cats = classify(pt, ps, ct, cs)
+                if not cats:
+                    continue
+                seen.update(cats)
+                first_change = first_change or (source_versions[0][2], cd)
+                versions.extend([
+                    {"title": pt, "subtitle": ps, "detected_at": source_versions[0][2],
+                     "categories": [], "subsource_id": source_id},
+                    {"title": ct, "subtitle": cs, "detected_at": cd,
+                     "categories": cats, "subsource_id": source_id},
+                ])
+        if not versions or (category and category not in seen):
             continue
+        versions.sort(key=lambda version: version["detected_at"])
         mid, url = info[aid]
         items.append({"article_id": aid, "media": names.get(mid, "?"), "url": url,
                       "versions": versions, "categories": [c for c in CATEGORIES if c in seen],
-                      "first_change_min": round((versions[1]["detected_at"]
-                                                 - versions[0]["detected_at"]).total_seconds() / 60),
+                      "first_change_min": round((first_change[1] - first_change[0]).total_seconds() / 60),
                       "last_change": versions[-1]["detected_at"]})
     items.sort(key=lambda x: x["last_change"], reverse=True)
     return {"total": len(items), "items": items[:limit], "truncated": len(items) > limit,

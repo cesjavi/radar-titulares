@@ -14,7 +14,7 @@ from datetime import datetime
 from radar.analysis import textproc as tp
 from radar.analysis.vectorize import TfIdf, Vector, cosine, top_shared
 
-# Umbrales (versión lexico-1.0). Cambiarlos implica subir ALGORITHM_VERSION.
+# Umbrales de la versión vigente. Cambiarlos implica subir ALGORITHM_VERSION.
 CHAR_NEAR_IDENTICAL = 0.85
 CHAR_POLARITY_CHECK = 0.70
 WORD_POLARITY_CHECK = 0.60

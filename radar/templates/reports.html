@@ -92,6 +92,16 @@
     <p class="small muted">Un día sin notas puede ser un hueco de recolección, no un día sin noticias (ver Ejecuciones).</p>
   </details>
   {% else %}<p class="muted">No hay notas detectadas en el período.</p>{% endif %}
+
+  {% if data.coverage.media %}
+  <h3>Cobertura de recolección</h3>
+  <p class="small">{{ csv_link('cobertura') }}</p>
+  <table class="table compact responsive">
+    <thead><tr><th>Medio</th><th>Días observados</th><th>Intentos</th><th>Exitosos</th><th>Vacíos</th><th>Fallidos</th><th>Tasa de éxito</th></tr></thead>
+    <tbody>{% for m in data.coverage.media %}<tr><td data-label="Medio">{{ m.name }}</td><td data-label="Días" class="num">{{ m.days }} / {{ data.coverage.period_days }}{% if data.coverage.period_days %}<div class="small muted">{{ '%.0f' | format(100 * m.days / data.coverage.period_days) }} %</div>{% endif %}</td><td data-label="Intentos" class="num">{{ m.attempted }}</td><td data-label="Exitosos" class="num">{{ m.successful }}</td><td data-label="Vacíos" class="num">{{ m.empty }}</td><td data-label="Fallidos" class="num">{{ m.failed }}</td><td data-label="Éxito" class="num">{% if m.success_rate is not none %}{{ '%.0f' | format(100 * m.success_rate) }} %{% else %}—{% endif %}</td></tr>{% endfor %}</tbody>
+  </table>
+  <p class="small muted">Un resultado vacío se muestra aparte: la fuente respondió, pero puede haber cambiado de formato. Estos agregados sobreviven al borrado de ejecuciones antiguas.</p>
+  {% endif %}
 </section>
 
 <section class="card" id="grupos">
@@ -125,7 +135,7 @@
     {% for p in data.agenda.pairs %}
       <tr>
         <td data-label="Par">{{ p.a }} / {{ p.b }}</td>
-        <td data-label="Período" class="num">{% if p.jaccard is not none %}{{ '%.1f' | format(p.jaccard * 100) }} % <span class="small muted">({{ p.shared }} de {{ p.union }})</span>{% else %}—{% endif %}</td>
+        <td data-label="Período" class="small">{% if p.jaccard is not none %}<strong>{{ '%.1f' | format(p.jaccard * 100) }} %</strong> <span class="muted">({{ p.shared }} de {{ p.union }})</span><div class="muted">{{ p.a }}→{{ p.b }}: {{ '%.0f' | format(100 * p.containment_a) }} % · {{ p.b }}→{{ p.a }}: {{ '%.0f' | format(100 * p.containment_b) }} %</div>{% if p.lift is not none %}<div class="muted">observado/esperado: {{ '%.2f' | format(p.lift) }}</div>{% endif %}{% else %}—{% endif %}</td>
         {% for wk in p.weekly %}
         <td data-label="Sem. {{ data.agenda.weeks[loop.index0] | iso_dt('%d/%m') }}" class="num small">{% if wk and wk[1] %}{{ '%.0f' | format(100 * wk[0] / wk[1]) }} %<div class="muted">{{ wk[0] }}</div>{% else %}<span class="muted" title="Alguno de los dos medios no tiene notas esa semana">—</span>{% endif %}</td>
         {% endfor %}
@@ -157,7 +167,7 @@
         <td data-label="Medio">{{ m.name }}</td>
         <td data-label="Notas" class="num">{{ m.articles }}</td>
         <td data-label="Con cambios" class="num">{{ m.changed }}{% if m.changed_pct is not none %} <span class="small muted">({{ '%.1f' | format(m.changed_pct) }} %)</span>{% endif %}</td>
-        <td data-label="Cambios" class="num">{{ m.changes }}</td>
+        <td data-label="Cambios" class="num">{{ m.changes }}{% if m.cross_source_variants %}<div class="small muted">{{ m.cross_source_variants }} variante{{ 's' if m.cross_source_variants != 1 }} entre subfuentes, no contada{{ 's' if m.cross_source_variants != 1 }} como cambio</div>{% endif %}</td>
         <td data-label="Mediana" class="num">{% if m.median_first_change_min is not none %}{{ m.median_first_change_min }} min{% else %}—{% endif %}</td>
         <td data-label="Qué cambió" class="small">{% for key, label in data.headlines.categories.items() if m.by_category.get(key) %}{{ label }}: {{ m.by_category[key] }}{% if not loop.last %} · {% endif %}{% else %}—{% endfor %}</td>
       </tr>

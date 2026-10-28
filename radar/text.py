@@ -64,6 +64,17 @@ def normalize_for_search(value: str) -> str:
     return clean_ws("".join(c for c in decomposed if not unicodedata.combining(c)))
 
 
+def tokenize_for_search(value: str) -> str:
+    """Palabras normalizadas con espacios en los bordes para coincidencia completa portable."""
+    words = re.findall(r"[a-z0-9]+", normalize_for_search(value))
+    return f" {' '.join(words)} " if words else ""
+
+
+def contains_search_term(tokenized: str, term: str) -> bool:
+    needle = tokenize_for_search(term)
+    return bool(needle and needle in tokenized)
+
+
 def title_similarity(a: str, b: str) -> float:
     """Jaccard de palabras (normalizadas, de 3+ letras) entre dos titulares."""
     wa = {w for w in re.findall(r"\w+", normalize_for_search(a)) if len(w) > 2}

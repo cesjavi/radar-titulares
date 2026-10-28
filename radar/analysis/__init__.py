@@ -4,4 +4,4 @@ Las similitudes son léxicas: indican palabras, frases o entidades compartidas, 
 textos digan lo mismo ni que haya coordinación entre medios.
 """
 
-ALGORITHM_VERSION = "lexico-1.1"
+ALGORITHM_VERSION = "lexico-1.2"

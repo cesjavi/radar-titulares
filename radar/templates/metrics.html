@@ -3,6 +3,30 @@
 {% block content %}
 <h1>Métricas entre medios</h1>
 
+{% if coverage.media %}
+<section class="card">
+  <h2>Cobertura de recolección</h2>
+  <p class="small muted">Disponibilidad observada en las últimas ocho semanas. Sirve para distinguir diferencias editoriales de huecos operativos; no mide cuántas noticias “debería” publicar cada medio.</p>
+  <table class="table compact responsive"><thead><tr><th>Medio</th><th>Días observados</th><th>Intentos</th><th>Exitosos</th><th>Vacíos</th><th>Fallidos</th><th>Éxito</th></tr></thead><tbody>
+  {% for row in coverage.media %}<tr><td data-label="Medio">{{ row.name }}</td><td data-label="Días" class="num">{{ row.days }} / {{ coverage.period_days }}{% if coverage.period_days %}<div class="small muted">{{ '%.0f' | format(100 * row.days / coverage.period_days) }} %</div>{% endif %}</td><td data-label="Intentos" class="num">{{ row.attempted }}</td><td data-label="Exitosos" class="num">{{ row.successful }}</td><td data-label="Vacíos" class="num">{{ row.empty }}</td><td data-label="Fallidos" class="num">{{ row.failed }}</td><td data-label="Éxito" class="num">{% if row.success_rate is not none %}{{ '%.0f' | format(100 * row.success_rate) }} %{% else %}—{% endif %}</td></tr>{% endfor %}
+  </tbody></table>
+</section>
+{% endif %}
+
+{% if interest.impressions or interest.actions %}
+<section class="card">
+  <h2>Señales de interés</h2>
+  <p class="small muted">Exposiciones y aperturas deduplicadas por persona, nota y día durante las últimas ocho semanas. La tasa solo usa aperturas de notas que también registraron una exposición; describe el uso del panel, no el interés de la audiencia general.</p>
+  <p><strong>{{ interest.impressions }}</strong> exposiciones · <strong>{{ interest.actions }}</strong> aperturas totales · <strong>{{ interest.exposed_actions }}</strong> aperturas con exposición registrada · {% if interest.rate is not none %}<strong>{{ '%.1f' | format(100 * interest.rate) }} %</strong> de apertura observada{% if interest.interval %} <span class="small muted">(IC 95 %: {{ '%.1f' | format(100 * interest.interval[0]) }}–{{ '%.1f' | format(100 * interest.interval[1]) }} %)</span>{% endif %}{% else %}tasa todavía no calculable{% endif %}</p>
+  {% if interest.buckets | selectattr('impressions') | list %}
+  <table class="table compact responsive"><thead><tr><th>Primera posición</th><th>Exposiciones</th><th>Aperturas</th><th>Tasa</th></tr></thead><tbody>
+  {% for row in interest.buckets %}{% if row.impressions %}<tr><td data-label="Posición">{{ row.label }}</td><td data-label="Exposiciones" class="num">{{ row.impressions }}</td><td data-label="Aperturas" class="num">{{ row.actions }}</td><td data-label="Tasa" class="num">{{ '%.1f' | format(100 * row.rate) }} %{% if row.interval %}<div class="small muted">IC 95 %: {{ '%.0f' | format(100 * row.interval[0]) }}–{{ '%.0f' | format(100 * row.interval[1]) }} %</div>{% endif %}</td></tr>{% endif %}{% endfor %}
+  </tbody></table>
+  {% endif %}
+  <p class="small muted">Se usa la primera posición registrada para cada persona, nota y día. Los intervalos de Wilson son orientativos porque una misma persona puede aportar varias notas. Comparar posiciones permite detectar sesgo de exposición: una nota ubicada arriba tiene más oportunidades de ser abierta. No se interpreta como efecto causal del orden.</p>
+</section>
+{% endif %}
+
 {% if agenda.pairs %}
 <section class="card" id="agenda">
   <h2>Agenda compartida</h2>
@@ -18,7 +42,7 @@
     {% for p in agenda.pairs %}
       <tr>
         <td data-label="Par">{{ p.a }} / {{ p.b }}</td>
-        <td data-label="Total" class="num">{% if p.jaccard is not none %}{{ '%.1f' | format(p.jaccard * 100) }} % <span class="small muted">({{ p.shared }} de {{ p.union }})</span>{% else %}—{% endif %}</td>
+        <td data-label="Total" class="small">{% if p.jaccard is not none %}<strong>{{ '%.1f' | format(p.jaccard * 100) }} %</strong> <span class="muted">({{ p.shared }} de {{ p.union }})</span><div class="muted">{{ p.a }} también en {{ p.b }}: {{ '%.0f' | format(100 * p.containment_a) }} % · {{ p.b }} también en {{ p.a }}: {{ '%.0f' | format(100 * p.containment_b) }} %</div>{% if p.lift is not none %}<div class="muted">observado/esperado por volumen: {{ '%.2f' | format(p.lift) }}</div>{% endif %}{% else %}—{% endif %}</td>
         {% for wk in p.weekly %}{% set week = agenda.weeks[loop.index0].strftime('%d/%m') %}
         {% if wk and wk[1] %}{% set pct = 100 * wk[0] / wk[1] %}{% set bin = 1 if pct < 1 else 2 if pct < 2 else 3 if pct < 4 else 4 if pct < 8 else 5 %}
         <td data-label="Semana del {{ week }}" class="num small heat-cell heat-{{ bin }}{{ ' heat-few' if wk[0] < 5 }}" title="Semana del {{ week }}: {{ wk[0] }} historias en común de {{ wk[1] }}{{ ' (pocas: el porcentaje varía mucho)' if wk[0] < 5 }}">{{ '%.0f' | format(pct) }} %<div class="muted">{{ wk[0] }}</div></td>
@@ -30,7 +54,7 @@
     {% endfor %}
     </tbody>
   </table>
-  <p class="small muted">Cada semana empieza el lunes (hora de Buenos Aires). Debajo del porcentaje, la cantidad de historias en común: con pocas, el porcentaje varía mucho (las semanas con menos de 5 historias en común van rayadas; cada tramo de color duplica al anterior). Más color no quiere decir más coordinación: dos medios grandes cubren muchas de las mismas noticias del día. «—»: alguno de los dos medios no tiene notas esa semana (sin recolección o dado de alta después); el total usa solo las semanas con los dos.</p>
+  <p class="small muted">Cada semana empieza el lunes (hora de Buenos Aires). Las coberturas direccionales muestran qué proporción de las historias de cada medio también aparece en el otro. Observado/esperado compara las coincidencias con las esperables por sus volúmenes dentro del universo monitoreado: tampoco prueba coordinación. Con pocas historias el porcentaje varía mucho. «—»: alguno de los dos medios no tiene notas esa semana; el total usa solo las semanas con los dos.</p>
 
   <h3>Cobertura sin coincidencia en otro medio</h3>
   <table class="table compact responsive">
@@ -54,7 +78,7 @@
 <section class="card">
   <h2>Por pares de medios</h2>
   <table class="table responsive">
-    <thead><tr><th>Par</th><th>Grupos en común</th><th>Por publicación (con hora en ambos)</th><th>Cobertura temporal</th><th>Diferencia de publicación (mediana · rango intercuartil)</th><th>Por detección del radar</th></tr></thead>
+    <thead><tr><th>Par</th><th>Grupos en común</th><th>Por publicación (con hora en ambos)</th><th>Cobertura temporal</th><th>Diferencia de publicación</th><th>Proporción e intervalo</th><th>Por detección del radar</th></tr></thead>
     <tbody>
     {% for p in m.pairs %}
       <tr>
@@ -62,8 +86,9 @@
         <td data-label="Grupos" class="num">{{ p.groups }}</td>
         <td data-label="Publicación" class="small">{{ p.a }} antes: {{ p.pub_a_first }} · {{ p.b }} antes: {{ p.pub_b_first }} · simultáneas: {{ p.pub_tie }}<div class="muted">sin hora en alguno: {{ p.pub_unknown }}</div></td>
         <td data-label="Cobertura" class="num">{{ p.pub_coverage }}%</td>
-        <td data-label="Diferencia" class="num">{% if p.median_gap_min is not none %}{{ p.median_gap_min }} min{% if p.gap_iqr_min %} <span class="small muted">({{ p.gap_iqr_min[0] }}–{{ p.gap_iqr_min[1] }})</span>{% endif %}{% else %}—{% endif %}</td>
-        <td data-label="Detección" class="small">{{ p.a }} antes: {{ p.det_a_first }} · {{ p.b }} antes: {{ p.det_b_first }}</td>
+        <td data-label="Diferencia" class="small">{% if p.median_gap_min is not none %}Magnitud mediana: {{ p.median_gap_min }} min{% if p.gap_iqr_min %} <span class="muted">({{ p.gap_iqr_min[0] }}–{{ p.gap_iqr_min[1] }})</span>{% endif %}<div class="muted">Mediana firmada: {{ p.median_signed_gap_min }} min; positivo = {{ p.a }} antes</div>{% else %}—{% endif %}</td>
+        <td data-label="Proporción" class="small">{% if p.a_first_share is not none %}{{ p.a }} antes en {{ '%.0f' | format(100 * p.a_first_share) }} %{% if p.a_first_interval %}<div class="muted">IC 95 %: {{ '%.0f' | format(100 * p.a_first_interval[0]) }}–{{ '%.0f' | format(100 * p.a_first_interval[1]) }} %</div>{% endif %}{% else %}—{% endif %}</td>
+        <td data-label="Detección" class="small">{{ p.a }} antes: {{ p.det_a_first }} · {{ p.b }} antes: {{ p.det_b_first }} · simultáneas: {{ p.det_tie }}</td>
       </tr>
     {% endfor %}
     </tbody>

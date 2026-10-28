@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+import math
 from statistics import median, quantiles
 
 from sqlalchemy import select
@@ -34,7 +35,9 @@ class PairStats:
     pub_unknown: int = 0  # al menos uno sin hora de publicación
     det_a_first: int = 0
     det_b_first: int = 0
+    det_tie: int = 0
     pub_gaps_min: list[float] = field(default_factory=list)
+    pub_signed_gaps_min: list[float] = field(default_factory=list)
 
     @property
     def pub_comparable(self) -> int:
@@ -55,6 +58,28 @@ class PairStats:
             return None
         q1, _, q3 = quantiles(self.pub_gaps_min, n=4)
         return round(q1, 1), round(q3, 1)
+
+    @property
+    def median_signed_gap_min(self) -> float | None:
+        """Positivo: A publicó antes que B; negativo: B publicó antes que A."""
+        return round(median(self.pub_signed_gaps_min), 1) if self.pub_signed_gaps_min else None
+
+    @property
+    def a_first_share(self) -> float | None:
+        decided = self.pub_a_first + self.pub_b_first
+        return self.pub_a_first / decided if decided else None
+
+    @property
+    def a_first_interval(self) -> tuple[float, float] | None:
+        decided = self.pub_a_first + self.pub_b_first
+        if not decided:
+            return None
+        z = 1.96
+        p = self.pub_a_first / decided
+        den = 1 + z * z / decided
+        mid = (p + z * z / (2 * decided)) / den
+        half = z * math.sqrt(p * (1 - p) / decided + z * z / (4 * decided * decided)) / den
+        return max(0.0, mid - half), min(1.0, mid + half)
 
 
 def sequence_metrics(db: Session, include_demo: bool = False) -> dict:
@@ -94,6 +119,7 @@ def sequence_metrics(db: Session, include_demo: bool = False) -> dict:
                 if px and py:
                     gap = (py - px).total_seconds() / 60
                     st.pub_gaps_min.append(abs(gap))
+                    st.pub_signed_gaps_min.append(gap)
                     if abs(gap) < 1:
                         st.pub_tie += 1
                     elif gap > 0:
@@ -102,7 +128,9 @@ def sequence_metrics(db: Session, include_demo: bool = False) -> dict:
                         st.pub_b_first += 1
                 else:
                     st.pub_unknown += 1
-                if reps[x]["det"] <= reps[y]["det"]:
+                if reps[x]["det"] == reps[y]["det"]:
+                    st.det_tie += 1
+                elif reps[x]["det"] < reps[y]["det"]:
                     st.det_a_first += 1
                 else:
                     st.det_b_first += 1
@@ -129,6 +157,9 @@ class AgendaPair:
     b: str
     shared: int = 0
     union: int = 0
+    stories_a: int = 0
+    stories_b: int = 0
+    universe: int = 0
     # (compartidas, unión) por semana; None si alguno de los dos no tiene notas esa semana
     # (medio dado de alta después, o sin recolección): un cero ahí no sería "no comparten".
     weekly: list[tuple[int, int] | None] = field(default_factory=list)
@@ -136,6 +167,23 @@ class AgendaPair:
     @property
     def jaccard(self) -> float | None:
         return self.shared / self.union if self.union else None
+
+    @property
+    def containment_a(self) -> float | None:
+        return self.shared / self.stories_a if self.stories_a else None
+
+    @property
+    def containment_b(self) -> float | None:
+        return self.shared / self.stories_b if self.stories_b else None
+
+    @property
+    def expected_shared(self) -> float | None:
+        return self.stories_a * self.stories_b / self.universe if self.universe else None
+
+    @property
+    def lift(self) -> float | None:
+        expected = self.expected_shared
+        return self.shared / expected if expected else None
 
 
 def agenda_metrics(db: Session, include_demo: bool = False, weeks: int = AGENDA_WEEKS,
@@ -189,7 +237,7 @@ def agenda_metrics(db: Session, include_demo: bool = False, weeks: int = AGENDA_
     for i, x in enumerate(media_ids):
         for y in media_ids[i + 1:]:
             p = AgendaPair(names.get(x, str(x)), names.get(y, str(y)))
-            all_x, all_y = set(), set()
+            all_x, all_y, universe = set(), set(), set()
             for w in week_list:
                 sx, sy = stories[w].get(x, set()), stories[w].get(y, set())
                 if not sx or not sy:
@@ -198,7 +246,10 @@ def agenda_metrics(db: Session, include_demo: bool = False, weeks: int = AGENDA_
                 p.weekly.append((len(sx & sy), len(sx | sy)))
                 all_x |= sx
                 all_y |= sy
+                for media_stories in stories[w].values():
+                    universe |= media_stories
             p.shared, p.union = len(all_x & all_y), len(all_x | all_y)
+            p.stories_a, p.stories_b, p.universe = len(all_x), len(all_y), len(universe)
             pairs.append(p)
     pairs.sort(key=lambda p: -(p.jaccard or 0))
 

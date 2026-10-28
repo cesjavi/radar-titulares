@@ -29,7 +29,10 @@
     var token = "";
     try { token = JSON.parse(document.body.getAttribute("hx-headers") || "{}")["X-CSRF-Token"] || ""; }
     catch (e) { return; }
-    fetch("/noticias/" + encodeURIComponent(link.getAttribute("data-click-id")) + "/click", {
+    var context = link.getAttribute("data-click-context") || "original";
+    var rank = link.getAttribute("data-click-rank") || "";
+    var query = "?context=" + encodeURIComponent(context) + (rank ? "&rank=" + encodeURIComponent(rank) : "");
+    fetch("/noticias/" + encodeURIComponent(link.getAttribute("data-click-id")) + "/click" + query, {
       method: "POST", keepalive: true, credentials: "same-origin",
       headers: {"X-CSRF-Token": token}
     }).catch(function () {});

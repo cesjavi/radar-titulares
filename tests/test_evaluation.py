@@ -74,8 +74,8 @@ def test_report_majority_reviews_and_survives_deletion(db, media):
 
     rep = precision_report(db)
     assert rep.by_type["mismo_hecho"].n == 1 and rep.by_type["mismo_hecho"].precision == 1.0
-    assert rep.by_type["mismo_tema"].incorrect == 1
-    assert rep.total.n == 2 and rep.unsure == 1 and rep.disagreements == 1
+    assert rep.operational.incorrect == 1
+    assert rep.total.n == 1 and rep.unsure == 1 and rep.disagreements == 1
 
     # La etiqueta copió tipo, puntaje y versión: borrar la relación no borra la medición, y sus
     # tres votos siguen contando como una sola relación.
@@ -133,3 +133,39 @@ def test_cli_evaluate(env, capsys, db, media):
     assert "Precisión del motor léxico" in out and "n=" in out
     assert main(["evaluate", "--json", "--version", "todas"]) == 0
     assert '"version": "todas"' in capsys.readouterr().out
+
+
+def test_new_algorithm_version_can_label_same_relation_again(db, media):
+    user = db.get(User, make_user("analista", role="analizador"))
+    a, b, _ = seed_story(db, media)
+    db.query(ArticleRelation).delete()
+    rel = _rel(db, a, b, "mismo_hecho", 0.7)
+    save_label(db, rel, user, "correcta")
+    rel.algorithm_version = "lexico-nueva"
+    db.commit()
+
+    selected = next_for_labeling(db, user, version="lexico-nueva", rng=random.Random(1))
+    assert selected is not None and selected.id == rel.id
+    save_label(db, selected, user, "incorrecta")
+    db.commit()
+    assert db.query(RelationLabel).filter_by(relation_id=rel.id, user_id=user.id).count() == 2
+
+
+def test_precision_separates_operational_reviews_and_weights_strata(db, media):
+    user = db.get(User, make_user("analista", role="analizador"))
+    a, b, c = seed_story(db, media)
+    db.query(ArticleRelation).delete()
+    low = _rel(db, a, b, "mismo_hecho", 0.3)
+    high = _rel(db, a, c, "mismo_hecho", 0.9)
+    operational = _rel(db, b, c, "mismo_tema", 0.5, status="rechazada")
+    low.sample_population = 90
+    high.sample_population = 10
+    save_label(db, low, user, "incorrecta")
+    save_label(db, high, user, "correcta")
+    db.commit()
+
+    report = precision_report(db)
+    assert report.total.precision == 0.5
+    assert report.weighted_precision == pytest.approx(0.1)
+    assert report.operational.incorrect == 1
+    assert report.total.n == 2 and operational.id

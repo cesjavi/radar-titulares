@@ -91,7 +91,7 @@ def test_compute_flags_only_the_rising_topic(db):
     result = trends.compute(db)
     assert [r["slug"] for r in result["rising"]] == ["tarifas"]
     r = result["rising"][0]
-    assert r["count"] == 6 and r["usual"] == 0
+    assert r["count"] == 5 and r["usual"] == 1
     assert r["media"] == 2 and sorted(r["media_names"]) == ["Medio Dos", "Medio Uno"]
 
 
@@ -103,3 +103,16 @@ def test_summary_shows_rising_topics(client, admin, db):
     body = client.get("/").text
     assert "Temas en alza" in body and "/noticias?topic=tarifas&periodo=24h" in body
     assert "no explica por qué" in body
+
+
+def test_topic_baseline_uses_same_time_slot():
+    now = utcnow().replace(minute=0, second=0, microsecond=0)
+    times = [now - timedelta(days=day) for day in range(1, 8) for _ in range(0)]
+    times += [now - timedelta(hours=3 * index)
+              for index in range(1, 40) if index % (24 // trends.WINDOW_HOURS) != 0
+              for _ in range(5)]
+    times += [now - timedelta(minutes=10) for _ in range(4)]
+    active = set(range(0, 40))
+    current, baseline = trends.window_counts(times, now, active, same_slot=True)
+    assert current == 4 and baseline == [0, 0, 0, 0]
+    assert trends.is_rising(current, baseline)[0] is True

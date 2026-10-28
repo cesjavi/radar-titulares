@@ -163,3 +163,29 @@ def test_permissions(client):
     assert r.status_code == 403
     # Sin CSRF, ni siquiera llega a evaluar el permiso.
     assert client.post("/informes/guardar", data={}).status_code == 403
+
+
+def test_groups_active_in_period_include_older_story_but_only_period_members(db):
+    media, _ = _seed(db)
+    older = Article(media_id=media["a"].id, url="https://x.example/old",
+                    canonical_url="https://x.example/old", title="Historia iniciada antes",
+                    search_text="historia iniciada antes", discovery_method="rss", content_hash="old",
+                    first_seen_at=SINCE - timedelta(days=1))
+    current = Article(media_id=media["b"].id, url="https://x.example/current",
+                      canonical_url="https://x.example/current", title="Historia continúa",
+                      search_text="historia continua", discovery_method="rss", content_hash="current",
+                      first_seen_at=INSIDE)
+    db.add_all([older, current])
+    db.flush()
+    group = StoryGroup(title="Historia activa", status="open", article_count=2,
+                       independent_media_count=2, first_seen_at=older.first_seen_at)
+    db.add(group)
+    db.flush()
+    db.add_all([StoryGroupMember(group_id=group.id, article_id=older.id, status="activo"),
+                StoryGroupMember(group_id=group.id, article_id=current.id, status="activo")])
+    db.commit()
+
+    data = reports.build(db, SINCE, UNTIL, now=INSIDE)
+    found = next(row for row in data["groups"]["top"] if row["id"] == group.id)
+    assert found["articles"] == 1
+    assert found["media"] == ["B"]

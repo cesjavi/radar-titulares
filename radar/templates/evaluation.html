@@ -2,7 +2,7 @@
 {% block title %}Evaluación del motor · Radar de Titulares{% endblock %}
 {% block content %}
 <h1>Evaluación del motor</h1>
-<p class="small muted">Marcá si cada relación que detectó el motor léxico es correcta para su tipo. Las relaciones salen de una muestra repartida por tipo y por puntaje (hasta {{ target }} por tipo), y el puntaje no se muestra para no influir en la respuesta. Las etiquetas no cambian la revisión, las alertas ni los grupos: solo sirven para medir.</p>
+<p class="small muted">Marcá si cada relación que detectó el motor léxico es correcta para su tipo. Las relaciones salen de una muestra repartida por tipo y por puntaje (hasta {{ target }} por tipo y persona), y el puntaje no se muestra para no influir en la respuesta. Al final hay una muestra separada de pares no detectados para auditar posibles omisiones. Las etiquetas no cambian la revisión, las alertas ni los grupos: solo sirven para medir.</p>
 
 {% if rel %}
 <section class="card">
@@ -54,6 +54,14 @@
       <td data-label="Intervalo 95 %" class="num">{{ '%.0f' | format(report.total.interval[0] * 100) }}–{{ '%.0f' | format(report.total.interval[1] * 100) }} %</td>
       <td data-label="Casos" class="num">{{ report.total.n }}</td>
     </tr>
+    {% if report.weighted_precision is not none %}
+    <tr>
+      <td data-label="Tipo"><strong>Total ponderado</strong></td>
+      <td data-label="Precisión" class="num"><strong>{{ '%.0f' | format(report.weighted_precision * 100) }} %</strong></td>
+      <td data-label="Intervalo 95 %" class="num">{% if report.weighted_interval %}{{ '%.0f' | format(report.weighted_interval[0] * 100) }}–{{ '%.0f' | format(report.weighted_interval[1] * 100) }} %{% else %}—{% endif %}</td>
+      <td data-label="Casos" class="num"><span class="small muted">pondera cada tramo por su población</span></td>
+    </tr>
+    {% endif %}
     </tbody>
   </table>
   <details>
@@ -71,9 +79,45 @@
       </tbody>
     </table>
   </details>
-  <p class="small muted">Con pocos casos el intervalo es amplio: mirá siempre la cantidad. Cuentan las etiquetas de esta pantalla y las revisiones del administrador; si varias personas etiquetan la misma relación, manda la mayoría. Sin decidir: {{ report.unsure }} · con desacuerdo: {{ report.disagreements }}. Esto mide cuántas relaciones detectadas están bien (precisión), no las que el motor no encontró.</p>
+  <p class="small muted">Con pocos casos el intervalo es amplio: mirá siempre la cantidad. El total ponderado corrige que la muestra tenga cantidades parecidas por tipo y puntaje aunque en producción algunos tramos sean mucho más frecuentes; su intervalo aparece cuando cada estrato usado tiene al menos dos casos. Es aproximado porque distintas relaciones pueden compartir una nota. Si varias personas etiquetan la misma relación, manda la mayoría. Sin decidir: {{ report.unsure }} · con desacuerdo: {{ report.disagreements }}{% if report.agreement is not none %} · acuerdo entre pares: {{ '%.0f' | format(100 * report.agreement) }} %{% if report.kappa is not none %} · kappa: {{ '%.2f' | format(report.kappa) }}{% endif %}{% endif %}. Esto mide cuántas relaciones detectadas están bien (precisión), no las que el motor no encontró.</p>
+  {% if report.operational.n %}<p class="small muted">Revisiones operativas, fuera de la muestra aleatoria: {{ report.operational.correct }} confirmadas y {{ report.operational.incorrect }} rechazadas. Se muestran aparte para no sesgar la precisión.</p>{% endif %}
+  {% if report.weighted_pending %}<p class="small muted">El total ponderado todavía no se muestra: faltan etiquetas decisivas en {{ report.weighted_pending }} estrato{{ 's' if report.weighted_pending != 1 }} de la población vigente.</p>{% endif %}
   {% else %}
   <p class="muted">Todavía no hay etiquetas para esta versión.</p>
   {% endif %}
+</section>
+
+<section class="card">
+  <h2>Auditoría de posibles omisiones</h2>
+  <p class="small muted">Esta muestra usa pares recientes de medios distintos que la versión {{ version }} no relacionó, repartidos por similitud léxica superficial. El universo queda fijado al abrir por primera vez cada diseño ({{ omission_version }}), para no mezclar poblaciones de días distintos. Sirve para buscar falsos negativos dentro de ese universo acotado; no mide por sí sola la exhaustividad global.</p>
+  {% if omission %}
+  <h3>¿Estas notas deberían estar relacionadas por el motor?</h3>
+  <p class="small muted">Tramo de similitud oculto para no influir en la respuesta · ventana calculada por hora de {{ omission.time_basis }}.</p>
+  <div class="compare">
+    {% for a in (omission.article_a, omission.article_b) %}
+    <article class="card">
+      <p class="muted small"><span class="media-tag">{{ a.media.name }}</span> · {{ fmt_pub(a) }}</p>
+      <h3>{{ a.title }}</h3>
+      {% if a.subtitle %}<p class="small">{{ a.subtitle }}</p>{% endif %}
+      {% if not a.is_demo and (a.url.startswith('https://') or a.url.startswith('http://')) %}<p class="small"><a href="{{ a.url }}" target="_blank" rel="noopener noreferrer nofollow">Abrir nota original ↗</a></p>{% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  <form method="post" action="/evaluacion/omisiones/{{ omission.article_a.id }}/{{ omission.article_b.id }}" class="row-buttons">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" name="etiqueta" value="omitida" class="btn">Sí, parece omitida</button>
+    <button type="submit" name="etiqueta" value="no_relacionada" class="btn btn-ghost">No deberían relacionarse</button>
+    <button type="submit" name="etiqueta" value="dudosa" class="btn btn-ghost">No sé</button>
+  </form>
+  {% else %}<p class="muted">No quedan pares candidatos para esta persona o todavía no hay suficientes notas recientes.</p>{% endif %}
+
+  {% if omission_report.weighted_rate is not none %}
+  <p><strong>Tasa ponderada de omisiones candidatas: {{ '%.1f' | format(100 * omission_report.weighted_rate) }} %</strong>{% if omission_report.weighted_interval %} <span class="small muted">(IC 95 %: {{ '%.1f' | format(100 * omission_report.weighted_interval[0]) }}–{{ '%.1f' | format(100 * omission_report.weighted_interval[1]) }} %)</span>{% endif %}</p>
+  <table class="table compact responsive"><thead><tr><th>Similitud superficial</th><th>Omitidas</th><th>No relacionadas</th><th>Tasa</th></tr></thead><tbody>
+  {% for bucket, cell in omission_report.by_bucket.items() %}<tr><td data-label="Tramo">{{ bucket }}</td><td data-label="Omitidas" class="num">{{ cell.omitted }}</td><td data-label="No relacionadas" class="num">{{ cell.unrelated }}</td><td data-label="Tasa" class="num">{{ '%.1f' | format(100 * cell.rate) }} %</td></tr>{% endfor %}
+  </tbody></table>
+  <p class="small muted">Sin decidir: {{ omission_report.unsure }} · con desacuerdo: {{ omission_report.disagreements }}{% if omission_report.agreement is not none %} · acuerdo entre pares: {{ '%.0f' | format(100 * omission_report.agreement) }} %{% if omission_report.kappa is not none %} · kappa: {{ '%.2f' | format(omission_report.kappa) }}{% endif %}{% endif %}. La ponderación corrige que se muestren cantidades parecidas de cada tramo aunque sus poblaciones sean distintas; el intervalo es aproximado porque distintos pares pueden compartir una nota. No incluye pares fuera de las últimas 72 horas, con más de 24 horas entre publicaciones declaradas cuando ambas tienen hora —o entre detecciones en los demás casos— ni fuera de las 300 notas más recientes.</p>
+  {% endif %}
+  {% if omission_report.weighted_pending %}<p class="small muted">La tasa ponderada todavía no se muestra: faltan etiquetas decisivas en {{ omission_report.weighted_pending }} tramo{{ 's' if omission_report.weighted_pending != 1 }} con población.</p>{% endif %}
 </section>
 {% endblock %}

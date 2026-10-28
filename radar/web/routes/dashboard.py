@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from radar.ai.service import current_group_analysis
 from radar.analysis import relevance, trends
 from radar.config import get_settings
+from radar.interactions import record as record_interaction
 from radar.models import (
     AiGroupAnalysis,
     Alert,
@@ -208,6 +209,15 @@ def summary(
         offset += batch
     hidden_count = db.scalar(select(func.count(StoryGroup.id)).where(
         StoryGroup.status == "open", StoryGroup.hidden_at.is_not(None))) or 0
+
+    visible_article_ids, visible_article_ranks = [], []
+    for rank, group in enumerate(featured_raw, 1):
+        article_ids = [member.article_id for member in group.members
+                       if member.status == "activo" and member.article is not None]
+        visible_article_ids.extend(article_ids)
+        visible_article_ranks.extend([rank] * len(article_ids))
+    record_interaction(db, visible_article_ids, getattr(user, "id", None),
+                       "impresion", f"resumen:{orden}", visible_article_ranks)
 
     gids = [g.id for g in featured_raw]
     ai_analyses = {}

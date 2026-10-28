@@ -7,7 +7,7 @@ from datetime import timedelta
 import pytest
 
 from radar.analysis.headline_changes import change_stats, classify, transitions
-from radar.models import Article, HeadlineVersion, Media
+from radar.models import Article, CollectionRun, HeadlineVersion, Media, Subsource
 from radar.timeutil import utcnow
 from tests.conftest import login
 
@@ -87,3 +87,38 @@ def test_history_page_shows_categories(client, admin, db):
     assert "Qué cambian los medios" in body
     assert "Cambia una cifra" in body and "Agrega o quita una negación" in body
     assert "no dicen por qué se cambió" in body
+
+
+def test_cross_subsource_variant_is_not_counted_as_rewrite(db):
+    media = Media(slug="m1", name="Medio Uno", base_url="https://m1.example")
+    db.add(media)
+    db.flush()
+    rss = Subsource(media_id=media.id, name="RSS", kind="rss", url="https://m1.example/rss")
+    section = Subsource(media_id=media.id, name="Sección", kind="html_section",
+                        url="https://m1.example/seccion")
+    db.add_all([rss, section])
+    db.flush()
+    run_rss = CollectionRun(media_id=media.id, subsource_id=rss.id, status="ok")
+    run_section = CollectionRun(media_id=media.id, subsource_id=section.id, status="ok")
+    db.add_all([run_rss, run_section])
+    db.flush()
+    now = utcnow()
+    article = Article(media_id=media.id, url="https://m1.example/nota",
+                      canonical_url="https://m1.example/nota", title="Versión de portada",
+                      search_text="version de portada", discovery_method="rss", content_hash="h",
+                      first_seen_at=now)
+    db.add(article)
+    db.flush()
+    db.add_all([
+        HeadlineVersion(article_id=article.id, title="Versión del RSS", content_hash="a",
+                        subsource_id=rss.id, collection_run_id=run_rss.id, detected_at=now),
+        HeadlineVersion(article_id=article.id, title="Versión de portada", content_hash="b",
+                        subsource_id=section.id, collection_run_id=run_section.id,
+                        detected_at=now + timedelta(minutes=1)),
+    ])
+    db.commit()
+
+    stats = change_stats(db)
+    row = stats["media"][0]
+    assert row.changed == 0
+    assert row.cross_source_variants == 1

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import pytest
+
 from radar.metrics import PairStats, agenda_metrics
 from radar.models import Article, Media, StoryGroup, StoryGroupMember
 from tests.conftest import login
@@ -55,6 +57,9 @@ def test_jaccard_by_week_and_exclusive_coverage(db):
     # comparten 1 → 1/4. La semana anterior comparten la única historia de cada uno → 1/1.
     assert ab.weekly == [(1, 1), (1, 4)]
     assert ab.shared == 2 and ab.union == 5 and abs(ab.jaccard - 0.4) < 1e-9
+    assert ab.stories_a == 4 and ab.stories_b == 3
+    assert ab.containment_a == 0.5 and ab.containment_b == pytest.approx(2 / 3)
+    assert ab.expected_shared is not None and ab.lift is not None
     assert not any("C" in (p.a, p.b) for p in data["pairs"])  # solo tenía una réplica
     exclusive = {e["name"]: e for e in data["exclusive"]}
     # La nota de A del grupo con la réplica de C no cuenta como coincidencia en otro medio.

@@ -32,6 +32,7 @@ from radar.joblock import LockBusy, job_lock
 from radar.db import session_scope
 from radar.models import CollectionRun, Media, Subsource
 from radar.net import BlockedError, DomainRateLimiter, FetchError, SafeFetcher, UnsafeURLError
+from radar.observations import record_run
 from radar.seed import get_setting
 from radar.timeutil import utcnow
 
@@ -250,6 +251,7 @@ def _store_outcome(out: FetchOutcome) -> CollectionRun:
         run.finished_at = utcnow()
         run.duration_ms = out.duration_ms
         _ = run.subsource.media  # cargado para usarlo fuera de la sesión
+        record_run(db, run)
     log.info("%s %s: %s, %d ítems, %d nuevos, %d cambios%s", job.media_slug, job.url, out.status,
              len(out.items), new, updated, f" — {out.error}" if out.error else "")
     return run
@@ -312,6 +314,7 @@ def _run_enrichment(fetcher: SafeFetcher, pool: ThreadPoolExecutor, only_media: 
             run.finished_at = utcnow()
             run.duration_ms = int((time.monotonic() - t0) * 1000)
             _ = run.media
+            record_run(db, run)
             runs.append(run)
         log.info("%s páginas: %s", adapter.slug, counts)
     return runs

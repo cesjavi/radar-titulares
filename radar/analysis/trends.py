@@ -31,7 +31,7 @@ MIN_COUNT = 4
 MAD_FACTOR = 3.0
 MAD_SCALE = 1.4826  # vuelve al MAD comparable con un desvío estándar
 MIN_SPREAD = 1.0  # con un tema casi siempre en cero, el MAD es 0: piso de una nota
-MIN_BASELINE_DAYS = 2  # con menos historia (en ventanas con recolección), no hay "habitual"
+MIN_BASELINE_DAYS = 7  # menos de una semana de esa franja no define un ritmo habitual estable
 MIN_COVERAGE = 0.5  # una ventana con menos de la mitad del volumen total habitual está incompleta
 FUTURE_TOLERANCE = timedelta(hours=1)  # hora de publicación algo adelantada (zona mal declarada)
 
@@ -45,7 +45,8 @@ def window_index(t: datetime, now: datetime) -> int | None:
 
 
 def window_counts(times: list[datetime], now: datetime,
-                  active: set[int] | None = None) -> tuple[int, list[int]]:
+                  active: set[int] | None = None,
+                  same_slot: bool = False) -> tuple[int, list[int]]:
     """Notas de la ventana actual y de cada ventana anterior (sin solaparse) del período base.
     Con `active`, la base usa solo las ventanas en las que el radar recolectó algo: un hueco
     de recolección contado como cero inventaría un ritmo habitual bajo."""
@@ -56,6 +57,9 @@ def window_counts(times: list[datetime], now: datetime,
         if idx is not None:
             counts[idx] += 1
     windows = range(1, n_windows + 1) if active is None else sorted(i for i in active if i > 0)
+    if same_slot:
+        per_day = 24 // WINDOW_HOURS
+        windows = [i for i in windows if i % per_day == 0]
     return counts[0], [counts[i] for i in windows]
 
 
@@ -106,9 +110,12 @@ def compute(db: Session, now: datetime | None = None) -> dict:
             continue
         rows = db.execute(
             select(Article.published_at, Article.media_id, Article.is_syndicated)
-            .where(cond, Article.is_demo.is_(False), when.is_not(None), when >= since,
+            .where(cond, Article.is_demo.is_(False), Article.is_syndicated.is_(False),
+                   when.is_not(None), when >= since,
                    when <= now + FUTURE_TOLERANCE)).all()
-        current, baseline = window_counts([p for p, *_ in rows], now, active)
+        current, baseline = window_counts([p for p, *_ in rows], now, active, same_slot=True)
+        if len(baseline) < MIN_BASELINE_DAYS:
+            continue
         up, med, threshold = is_rising(current, baseline)
         if not up:
             continue

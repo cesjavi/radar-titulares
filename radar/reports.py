@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session, selectinload
 from radar.ai.service import current_group_analysis
 from radar.analysis import ALGORITHM_VERSION, headline_changes
 from radar.metrics import agenda_metrics
+from radar.observations import coverage_metrics
 from radar.models import (
     AiGroupAnalysis,
     Alert,
@@ -41,7 +42,7 @@ from radar.models import (
 from radar.queries import topic_condition
 from radar.timeutil import LOCAL_TZ, to_local, to_utc_naive, utcnow
 
-REPORT_FORMAT = 1
+REPORT_FORMAT = 2
 MAX_DAYS = 180
 TOP_GROUPS = 20
 TOP_TOPICS = 15
@@ -87,6 +88,7 @@ def build(db: Session, since: datetime, until: datetime, media: Media | None = N
         "generated_at": _iso(now or utcnow()),
         "algorithm_version": ALGORITHM_VERSION,
         "volume": _volume(db, since, until, media, include_demo, names),
+        "coverage": coverage_metrics(db, since, until, media.id if media else None),
         "groups": groups,
         "agenda": _agenda(db, since, until, media, include_demo),
         "headlines": _headlines(db, since, until, media, include_demo),
@@ -127,32 +129,39 @@ def _volume(db, since, until, media, include_demo, names) -> dict:
 
 
 def _groups(db, since, until, media, include_demo) -> tuple[dict, list[int]]:
+    active_ids = (select(StoryGroupMember.group_id)
+                  .join(Article, Article.id == StoryGroupMember.article_id)
+                  .where(StoryGroupMember.status == "activo",
+                         Article.first_seen_at >= since, Article.first_seen_at < until))
     groups = db.scalars(
         select(StoryGroup)
         .options(selectinload(StoryGroup.members).selectinload(StoryGroupMember.article)
                  .selectinload(Article.media))
         .where(StoryGroup.status == "open", StoryGroup.hidden_at.is_(None),
-               StoryGroup.first_seen_at >= since, StoryGroup.first_seen_at < until)).all()
+               StoryGroup.id.in_(active_ids))).all()
     kept = []
     for g in groups:
-        arts = [m.article for m in g.members if m.status == "activo" and m.article]
+        arts = [m.article for m in g.members if m.status == "activo" and m.article
+                and since <= m.article.first_seen_at < until]
         if not arts or (not include_demo and any(a.is_demo for a in arts)):
             continue
         if media is not None and all(a.media_id != media.id for a in arts):
             continue
-        kept.append((g, arts))
-    kept.sort(key=lambda x: (-x[0].independent_media_count, -x[0].article_count,
-                             x[0].first_seen_at))
+        independent = len({a.media_id for a in arts if not a.is_syndicated})
+        period_first_seen = min(a.first_seen_at for a in arts)
+        kept.append((g, arts, independent, period_first_seen))
+    kept.sort(key=lambda x: (-x[2], -len(x[1]), x[3]))
     top = []
-    for g, arts in kept[:TOP_GROUPS]:
+    for g, arts, independent, period_first_seen in kept[:TOP_GROUPS]:
         # Las réplicas se listan aparte: no cuentan como medio independiente.
         own = sorted({a.media.name for a in arts if not a.is_syndicated})
         synd = sorted({a.media.name for a in arts if a.is_syndicated} - set(own))
-        top.append({"id": g.id, "title": g.title, "independent": g.independent_media_count,
+        top.append({"id": g.id, "title": g.title, "independent": independent,
                     "articles": len(arts), "media": own, "syndicated_media": synd,
-                    "first_seen": _iso(g.first_seen_at)})
-    return ({"total": len(kept), "multi": sum(1 for g, _ in kept if g.independent_media_count >= 2),
-             "top": top}, [g.id for g, _ in kept])
+                    "first_seen": _iso(period_first_seen)})
+    return ({"total": len(kept),
+             "multi": sum(1 for _g, _arts, n, _seen in kept if n >= 2),
+             "top": top}, [g.id for g, _arts, _n, _seen in kept])
 
 
 def _agenda(db, since, until, media, include_demo) -> dict:
@@ -162,7 +171,10 @@ def _agenda(db, since, until, media, include_demo) -> dict:
     return {
         "weeks": [w.date().isoformat() for w in data["weeks"]],
         "pairs": [{"a": p.a, "b": p.b, "shared": p.shared, "union": p.union,
-                   "jaccard": p.jaccard, "weekly": [list(w) if w else None for w in p.weekly]}
+                   "jaccard": p.jaccard, "stories_a": p.stories_a,
+                   "stories_b": p.stories_b, "containment_a": p.containment_a,
+                   "containment_b": p.containment_b, "expected_shared": p.expected_shared,
+                   "lift": p.lift, "weekly": [list(w) if w else None for w in p.weekly]}
                   for p in pairs],
         "exclusive": exclusive,
     }
@@ -178,8 +190,9 @@ def _headlines(db, since, until, media, include_demo) -> dict:
         "categories": dict(headline_changes.CATEGORIES),
         "totals": dict(totals),
         "media": [{"name": s.name, "articles": s.articles, "changed": s.changed,
-                   "changes": s.changes, "changed_pct": s.changed_pct,
-                   "median_first_change_min": s.median_first_change_min,
+                    "changes": s.changes, "changed_pct": s.changed_pct,
+                    "cross_source_variants": s.cross_source_variants,
+                    "median_first_change_min": s.median_first_change_min,
                    "by_category": dict(s.by_category)} for s in rows],
     }
 
@@ -307,6 +320,7 @@ def _tone(db, group_ids, media, include_demo, names, public=False) -> dict:
 SECTIONS = {
     "volumen": "Volumen por medio",
     "volumen-diario": "Volumen por día",
+    "cobertura": "Cobertura de recolección",
     "grupos": "Grupos principales",
     "agenda": "Agenda compartida",
     "titulares": "Cambios de titular",
@@ -334,6 +348,17 @@ def table(data: dict, section: str) -> tuple[list[str], list[list]]:
         return (["Día", *media, "Total"],
                 [[date.fromisoformat(d["day"]).strftime("%d/%m/%Y"), *d["counts"], d["total"]]
                  for d in data["volume"]["days"]])
+    if section == "cobertura":
+        period_days = data.get("coverage", {}).get("period_days", 0)
+        return (["Medio", "Intentos", "Exitosos", "Vacíos", "Fallidos", "Días observados",
+                 "Días del período", "Cobertura de días (%)", "Ítems encontrados",
+                 "Notas nuevas", "Éxito (%)"],
+                [[m["name"], m["attempted"], m["successful"], m["empty"], m["failed"],
+                  m["days"], period_days,
+                  _pct(100 * m["days"] / period_days if period_days else None),
+                  m["items_found"], m["items_new"],
+                  _pct(None if m["success_rate"] is None else 100 * m["success_rate"])]
+                 for m in data.get("coverage", {}).get("media", [])])
     if section == "grupos":
         return (["Grupo", "Título", "Medios independientes", "Notas", "Medios",
                  "Réplicas de", "Primera detección"],
@@ -342,15 +367,21 @@ def table(data: dict, section: str) -> tuple[list[str], list[list]]:
                  for g in data["groups"]["top"]])
     if section == "agenda":
         return (["Medio A", "Medio B", "Historias en común", "Historias de alguno",
-                 "Agenda compartida (%)"],
+                  "Agenda compartida (%)", "A también en B (%)", "B también en A (%)",
+                  "Coincidencias esperadas", "Relación observado/esperado"],
                 [[p["a"], p["b"], p["shared"], p["union"],
-                  _pct(None if p["jaccard"] is None else 100 * p["jaccard"])]
+                  _pct(None if p["jaccard"] is None else 100 * p["jaccard"]),
+                  _pct(None if p["containment_a"] is None else 100 * p["containment_a"]),
+                  _pct(None if p["containment_b"] is None else 100 * p["containment_b"]),
+                  _pct(p["expected_shared"]), _pct(p["lift"])]
                  for p in data["agenda"]["pairs"]])
     if section == "titulares":
         cats = data["headlines"]["categories"]
         return (["Medio", "Notas", "Con cambios", "Con cambios (%)", "Cambios",
-                 "Mediana hasta el primer cambio (min)", *cats.values()],
+                  "Variantes entre subfuentes",
+                  "Mediana hasta el primer cambio (min)", *cats.values()],
                 [[m["name"], m["articles"], m["changed"], _pct(m["changed_pct"]), m["changes"],
+                  m.get("cross_source_variants", 0),
                   m["median_first_change_min"] if m["median_first_change_min"] is not None else "",
                   *[m["by_category"].get(c, 0) for c in cats]]
                  for m in data["headlines"]["media"]])

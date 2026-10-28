@@ -20,6 +20,7 @@ from radar.text import (
     clean_ws,
     content_hash,
     normalize_for_search,
+    tokenize_for_search,
     title_similarity,
     truncate,
 )
@@ -36,6 +37,11 @@ SKIPPED = "skipped"
 def build_search_text(title: str, subtitle: str | None, keywords: str | None,
                       author: str | None = None) -> str:
     return normalize_for_search(" ".join(p for p in (title, subtitle, keywords, author) if p))
+
+
+def build_search_tokens(title: str, subtitle: str | None, keywords: str | None,
+                        author: str | None = None) -> str:
+    return tokenize_for_search(" ".join(p for p in (title, subtitle, keywords, author) if p))
 
 
 # Por debajo de esta similitud, el mismo identificador con otra URL no se considera la
@@ -151,6 +157,7 @@ def upsert_item(
             keywords=keywords,
             body_text=body,
             search_text=build_search_text(title, subtitle, keywords, author),
+            search_tokens=build_search_tokens(title, subtitle, keywords, author),
             published_at=pub_at,
             published_date=pub_date,
             published_precision=pub_prec,
@@ -168,7 +175,7 @@ def upsert_item(
         db.flush()
         db.add(HeadlineVersion(article_id=article.id, title=title, subtitle=subtitle,
                                content_hash=digest, detected_at=now, collection_run_id=run_id,
-                               origin="feed"))
+                               subsource_id=subsource.id, origin="feed"))
         _record_sighting(db, article, subsource, item, now)
         save_references(db, article, _item_references(item, title, subtitle, own_domains))
         return NEW
@@ -219,7 +226,8 @@ def upsert_item(
     article.subtitle = new_subtitle
     article.content_hash = digest
     article.search_text = build_search_text(title, new_subtitle, article.keywords, article.author)
+    article.search_tokens = build_search_tokens(title, new_subtitle, article.keywords, article.author)
     db.add(HeadlineVersion(article_id=article.id, title=title, subtitle=new_subtitle,
                            content_hash=digest, detected_at=now, collection_run_id=run_id,
-                           origin="feed"))
+                           subsource_id=subsource.id, origin="feed"))
     return UPDATED

@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Select, and_, func, not_, or_, select
+from sqlalchemy import Select, and_, func, literal, not_, or_, select
 
 from radar.models import Article, Topic
-from radar.text import normalize_for_search
+from radar.text import contains_search_term, normalize_for_search, tokenize_for_search
 
 
 def _like(term: str):
     escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return Article.search_text.like(f"%{escaped}%", escape="\\")
+
+
+def _whole_term(term: str):
+    normalized = tokenize_for_search(term).strip()
+    escaped = normalized.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    source = func.coalesce(func.nullif(Article.search_tokens, ""), Article.search_text)
+    padded = literal(" ") + source + literal(" ")
+    return padded.like(f"% {escaped} %", escape="\\")
 
 
 # Solo las letras del español: más anidamiento de replace() desborda el parser de SQLite.
@@ -40,9 +48,9 @@ def topic_condition(topic: Topic):
     exclude = [normalize_for_search(k) for k in topic.exclude_list()]
     if not include:
         return None
-    cond = or_(*[_like(k) for k in include])
+    cond = or_(*[_whole_term(k) for k in include])
     if exclude:
-        cond = and_(cond, not_(or_(*[_like(k) for k in exclude])))
+        cond = and_(cond, not_(or_(*[_whole_term(k) for k in exclude])))
     return cond
 
 
@@ -63,10 +71,10 @@ def visible_articles(demo_mode: bool, hidden: bool | None = False) -> Select:
 
 def matching_topics(article: Article, topics: list[Topic]) -> list[tuple[Topic, list[str]]]:
     """Temas que coinciden con el artículo y las palabras que lo justifican (evidencia)."""
-    text = article.search_text or ""
+    text = article.search_tokens or tokenize_for_search(article.search_text or "")
     out = []
     for topic in topics:
-        hits = [k for k in topic.keyword_list() if normalize_for_search(k) in text]
-        if hits and not any(normalize_for_search(k) in text for k in topic.exclude_list()):
+        hits = [k for k in topic.keyword_list() if contains_search_term(text, k)]
+        if hits and not any(contains_search_term(text, k) for k in topic.exclude_list()):
             out.append((topic, hits))
     return out

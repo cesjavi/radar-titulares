@@ -13,6 +13,7 @@ from radar.analysis.attribution import find_attributions
 from radar.analysis.manual import set_article_hidden
 from radar.analysis.relations import TYPE_LABELS
 from radar.config import get_settings
+from radar.interactions import record as record_interaction
 from radar.models import (
     Article,
     ArticleRelation,
@@ -105,6 +106,9 @@ def article_list(
         .offset((page - 1) * PER_PAGE)
         .limit(PER_PAGE)
     ).all()
+    record_interaction(db, [article.id for article in rows], getattr(user, "id", None),
+                       "impresion", f"noticias:{orden}",
+                       list(range((page - 1) * PER_PAGE + 1, (page - 1) * PER_PAGE + 1 + len(rows))))
 
     media_q = select(Media).order_by(Media.is_demo, Media.name)
     if not demo:
@@ -138,11 +142,15 @@ def article_list(
 
 @router.post("/noticias/{article_id}/click", dependencies=[Depends(verify_csrf)])
 def register_article_click(article_id: int, db: Session = Depends(get_db),
-                           user: User = Depends(viewer)):
+                           user: User = Depends(viewer),
+                           context: str = Query("original", max_length=64),
+                           rank: int | None = Query(None, ge=1, le=10000)):
     """Se abrió la nota original desde el panel (lo envía panel.js)."""
     db.execute(
         update(Article).where(Article.id == article_id).values(clicks=Article.clicks + 1)
     )
+    record_interaction(db, [article_id], getattr(user, "id", None), "original", context,
+                       [rank] if rank is not None else None)
     return {"ok": True}
 
 
@@ -154,6 +162,8 @@ def article_hide(article_id: int, ocultar: bool = Form(True),
     if article is None:
         raise HTTPException(status_code=404, detail="La noticia no existe.")
     set_article_hidden(db, article, ocultar, user)
+    if ocultar:
+        record_interaction(db, [article.id], getattr(user, "id", None), "ocultar", "manual")
     return RedirectResponse(safe_return(volver, f"/noticias/{article_id}"), status_code=303)
 
 
@@ -176,6 +186,7 @@ def article_detail(
     db.execute(
         update(Article).where(Article.id == article.id).values(clicks=Article.clicks + 1)
     )
+    record_interaction(db, [article.id], getattr(user, "id", None), "detalle", "ficha")
     db.commit()
 
     relations = db.scalars(

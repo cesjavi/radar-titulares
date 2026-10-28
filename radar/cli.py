@@ -33,12 +33,14 @@ def _read_password(args) -> str:
 
 def cmd_init_db(_args) -> int:
     from radar.db import session_scope
+    from radar.observations import backfill
     from radar.seed import seed_settings, seed_social_accounts, seed_sources, seed_topics
 
     upgrade_db()
     with session_scope() as db:
         n = (seed_sources(db) + seed_topics(db) + seed_settings(db)
              + seed_social_accounts(db))
+        backfill(db)
     print(f"Base de datos lista. Registros iniciales creados: {n}.")
     return 0
 

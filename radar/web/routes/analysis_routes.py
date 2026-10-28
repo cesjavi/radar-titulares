@@ -23,7 +23,7 @@ from radar.ai.service import (
     latest_for_group,
     pair_filter,
 )
-from radar.analysis import ALGORITHM_VERSION, evaluation
+from radar.analysis import ALGORITHM_VERSION, evaluation, omissions
 from radar.analysis.attribution import group_sources
 from radar.analysis.manual import (
     ManualError,
@@ -410,7 +410,9 @@ def group_merge(group_id: int, other_id: int = Form(...), note: str = Form("", m
 def evaluation_page(request: Request, db: Session = Depends(get_db),
                     user: User = Depends(require_analyst)):
     """Muestra estratificada para medir la precisión del motor, de a una relación."""
-    rel = evaluation.next_for_labeling(db, user, include_demo=demo_visible(request))
+    include_demo = demo_visible(request)
+    rel = evaluation.next_for_labeling(db, user, include_demo=include_demo)
+    omission = omissions.next_candidate(db, user, include_demo=include_demo)
     evidence = _json(rel.evidence, {}) if rel else {}
     return render(request, "evaluation.html", {
         "rel": rel, "frases": evidence.get("frases", []),
@@ -418,6 +420,8 @@ def evaluation_page(request: Request, db: Session = Depends(get_db),
         if rel else None,
         "label": TYPE_LABELS.get(rel.relation_type, rel.relation_type) if rel else None,
         "report": evaluation.precision_report(db), "labels": TYPE_LABELS,
+        "omission": omission, "omission_report": omissions.report(db, include_demo=include_demo),
+        "omission_version": omissions.sample_key(include_demo),
         "choices": evaluation.LABELS, "target": evaluation.TARGET_PER_TYPE,
         "version": ALGORITHM_VERSION, "nav": "evaluacion",
     }, user=user)
@@ -431,6 +435,20 @@ def evaluation_label(rel_id: int, etiqueta: str = Form(..., max_length=16),
         raise HTTPException(status_code=404, detail="La relación no existe.")
     try:
         evaluation.save_label(db, rel, user, etiqueta)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse("/evaluacion", status_code=303)
+
+
+@router.post("/evaluacion/omisiones/{article_a_id}/{article_b_id}",
+             dependencies=[Depends(verify_csrf)])
+def evaluation_omission_label(request: Request, article_a_id: int, article_b_id: int,
+                              etiqueta: str = Form(..., max_length=16),
+                              db: Session = Depends(get_db),
+                              user: User = Depends(require_analyst)):
+    try:
+        omissions.save_label(db, article_a_id, article_b_id, user, etiqueta,
+                             include_demo=demo_visible(request))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return RedirectResponse("/evaluacion", status_code=303)

@@ -21,6 +21,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
+from radar.text import tokenize_for_search
 from radar.timeutil import utcnow
 
 NAMING = {
@@ -134,6 +135,8 @@ class Article(Base):
     keywords: Mapped[str | None] = mapped_column(Text)
     # Texto normalizado (minúsculas, sin tildes) de titular+bajada+palabras clave, para búsqueda.
     search_text: Mapped[str] = mapped_column(Text, default="")
+    # Texto normalizado a palabras, con espacios en los bordes, para búsquedas por palabra completa.
+    search_tokens: Mapped[str] = mapped_column(Text, default="", server_default="")
     # Cuerpo en texto plano, solo si la fuente lo publica en el feed (truncado).
     body_text: Mapped[str | None] = mapped_column(Text)
 
@@ -183,6 +186,11 @@ class Article(Base):
             return "bajada"
         return "titular"
 
+    @validates("search_text")
+    def _sync_search_tokens(self, _key: str, value: str) -> str:
+        self.search_tokens = tokenize_for_search(value or "")
+        return value
+
 
 class ArticleSighting(Base):
     """Procedencia: en qué subfuentes apareció cada artículo y con qué identificador."""
@@ -205,6 +213,29 @@ class ArticleSighting(Base):
 
     article: Mapped[Article] = relationship(back_populates="sightings")
     subsource: Mapped[Subsource] = relationship()
+
+
+class ArticleInteraction(Base):
+    """Señal mínima de interés, deduplicada por persona, día, evento y contexto."""
+
+    __tablename__ = "article_interactions"
+    __table_args__ = (
+        UniqueConstraint("article_id", "user_id", "event", "day", "context"),
+        Index("ix_article_interactions_day_event", "day", "event"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    article_id: Mapped[int] = mapped_column(
+        ForeignKey("articles.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    event: Mapped[str] = mapped_column(String(16))  # impresion | detalle | original | ocultar
+    context: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    rank: Mapped[int | None] = mapped_column(Integer)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class MediaReference(Base):
@@ -243,6 +274,11 @@ class HeadlineVersion(Base):
     collection_run_id: Mapped[int | None] = mapped_column(
         ForeignKey("collection_runs.id", ondelete="SET NULL")
     )
+    # Se conserva aunque se purgue la ejecución, para distinguir una reescritura de una variante
+    # simultánea entre RSS, sitemap y portada.
+    subsource_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subsources.id", ondelete="SET NULL"), index=True
+    )
 
     article: Mapped[Article] = relationship(back_populates="versions")
 
@@ -272,6 +308,34 @@ class CollectionRun(Base):
 
     subsource: Mapped[Subsource | None] = relationship()
     media: Mapped[Media | None] = relationship()
+
+
+class DailyObservation(Base):
+    """Agregado persistente de recolección; sobrevive al purgado de ejecuciones detalladas."""
+
+    __tablename__ = "daily_observations"
+
+    key: Mapped[str] = mapped_column(String(160), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, index=True)
+    media_id: Mapped[int | None] = mapped_column(
+        ForeignKey("media.id", ondelete="SET NULL"), index=True
+    )
+    subsource_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subsources.id", ondelete="SET NULL"), index=True
+    )
+    media_name: Mapped[str] = mapped_column(String(128), default="", server_default="")
+    subsource_name: Mapped[str] = mapped_column(String(128), default="", server_default="")
+    run_type: Mapped[str] = mapped_column(String(16))
+    attempted: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    successful: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    empty: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    failed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    items_found: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    items_new: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    first_run_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_run_id: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 class JobLock(Base):
@@ -344,7 +408,7 @@ class RelationLabel(Base):
     agrupadas."""
 
     __tablename__ = "relation_labels"
-    __table_args__ = (UniqueConstraint("relation_id", "user_id"),
+    __table_args__ = (UniqueConstraint("relation_id", "user_id", "algorithm_version"),
                       Index("ix_relation_labels_version", "algorithm_version"))
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -353,6 +417,29 @@ class RelationLabel(Base):
     label: Mapped[str] = mapped_column(String(16))
     relation_type: Mapped[str] = mapped_column(String(32))
     score: Mapped[float | None] = mapped_column(Float)
+    algorithm_version: Mapped[str] = mapped_column(String(32))
+    # Tamaño del estrato cuando se tomó la etiqueta: permite reponderar la muestra balanceada.
+    sample_population: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class OmissionLabel(Base):
+    """Etiqueta de un par candidato que la versión indicada no relacionó."""
+
+    __tablename__ = "omission_labels"
+    __table_args__ = (
+        UniqueConstraint("article_a_id", "article_b_id", "user_id", "algorithm_version"),
+        Index("ix_omission_labels_version", "algorithm_version"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    article_a_id: Mapped[int] = mapped_column(Integer)
+    article_b_id: Mapped[int] = mapped_column(Integer)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    label: Mapped[str] = mapped_column(String(16))  # omitida | no_relacionada | dudosa
+    bucket: Mapped[str] = mapped_column(String(16))
+    similarity: Mapped[float] = mapped_column(Float)
+    sample_population: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     algorithm_version: Mapped[str] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 

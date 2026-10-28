@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from radar.collector.adapters import MediaAdapter
 from radar.collector.html import PageMeta, parse_article_page
-from radar.collector.ingest import build_search_text, save_references
+from radar.collector.ingest import build_search_text, build_search_tokens, save_references
 from radar.collector.references import find_link_references, find_text_mentions
 from radar.models import Article, HeadlineVersion, Media, Topic
 from radar.net import BlockedError, FetchError, SafeFetcher, UnsafeURLError
@@ -136,6 +136,8 @@ def apply_result(db: Session, adapter: MediaAdapter, result: EnrichResult,
         article.subtitle = truncate(meta.description, MAX_SUBTITLE)
         article.content_hash = content_hash(article.title, article.subtitle)
         article.search_text = build_search_text(article.title, article.subtitle, article.keywords, article.author)
+        article.search_tokens = build_search_tokens(article.title, article.subtitle, article.keywords,
+                                                    article.author)
         db.add(HeadlineVersion(article_id=article.id, title=article.title,
                                subtitle=article.subtitle, content_hash=article.content_hash,
                                detected_at=now, collection_run_id=run_id, origin="pagina"))
@@ -147,6 +149,8 @@ def apply_result(db: Session, adapter: MediaAdapter, result: EnrichResult,
     if meta.keywords and not article.keywords:
         article.keywords = ", ".join(meta.keywords)[:2000]
     article.search_text = build_search_text(article.title, article.subtitle, article.keywords, article.author)
+    article.search_tokens = build_search_tokens(article.title, article.subtitle, article.keywords,
+                                                article.author)
     if meta.section and not article.section:
         article.section = meta.section[:256]
 

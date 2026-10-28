@@ -98,7 +98,7 @@ Los datos demo usan dominios `.invalid`, se marcan con la insignia DEMO y un avi
 | `python -m radar create-admin USUARIO [--password-stdin]` | Crea un administrador. |
 | `python -m radar create-user USUARIO [--role analizador\|admin] [--password-stdin]` | Crea un usuario con perfil (por defecto, analizador). También se hace desde Configuración → Usuarios. |
 | `python -m radar set-password USUARIO [--password-stdin]` | Cambia la contraseña y cierra las sesiones abiertas. |
-| `python -m radar evaluate [--version V\|todas] [--json]` | Precisión del motor léxico por tipo y tramo de puntaje, según las etiquetas de «Evaluación del motor» y las revisiones del administrador. |
+| `python -m radar evaluate [--version V\|todas] [--json]` | Precisión del motor léxico por tipo y tramo de puntaje según la muestra de «Evaluación del motor»; las revisiones operativas se informan aparte. |
 | `python -m radar collect` | Recolecta una vez todas las subfuentes cuyo intervalo mínimo ya venció. |
 | `python -m radar collect --media perfil\|eldestape\|infobae\|pagina12` | Recolecta un solo medio. |
 | `python -m radar collect --force` | Ignora el intervalo mínimo. |
@@ -163,7 +163,7 @@ Reglas y límites:
 
 ## Coincidencias y grupos (motor léxico, sin IA)
 
-Código en `radar/analysis/`. Versión del algoritmo: `lexico-1.1`; se guarda en cada relación y en cada grupo, junto con las reglas aplicadas.
+Código en `radar/analysis/`. Versión del algoritmo: `lexico-1.2`; se guarda en cada relación y en cada grupo, junto con las reglas aplicadas.
 
 **Importante:** las similitudes son **léxicas**. Indican palabras, frases o entidades compartidas; no que dos notas digan lo mismo, tengan el mismo enfoque ni que haya coordinación. El "enfoque" queda siempre **sin verificar**, y el puntaje (0 a 1) no es una probabilidad.
 
@@ -368,12 +368,14 @@ Con `RADAR_PUBLIC_MODE=true`, cualquiera puede ver el panel **en modo de solo le
 | Cronología (`/cronologia`) | Primera detección y primera publicación según la fuente, por grupo |
 | Revisión (`/revision`) | Cola de alertas pendientes y relaciones sin revisar |
 | Historial (`/historial`) | Titulares modificados por los medios, eventos de alertas y correcciones manuales |
-| Métricas (`/metricas`) | Secuencias entre medios: casos, precisión temporal y cobertura |
-| Informes (`/informes`) | Informe de un período y, opcionalmente, un medio: volumen, grupos principales, agenda compartida, cambios de titular, temas, revisiones y alertas, y tono según la IA. CSV por sección, versión para imprimir/PDF e informes guardados como foto |
+| Métricas (`/metricas`) | Cobertura de recolección, agenda compartida ajustada por volumen, secuencias con intervalos y señales de interés por exposición |
+| Informes (`/informes`) | Informe de un período y, opcionalmente, un medio: volumen y cobertura, grupos activos, agenda compartida, cambios de titular, temas, revisiones y alertas, y tono según la IA. CSV por sección, versión para imprimir/PDF e informes guardados como foto |
 | Fuentes y Ejecuciones | Estado operativo de cada fuente; ejecuciones y errores con filtros |
 | Configuración | Temas, secciones prioritarias, reglas de alertas, Telegram (estado) y contraseña |
 
-**Métricas de secuencias:** son descriptivas. Cuentan, por par de medios, cuántas veces uno publicó antes que el otro (solo cuando ambas notas tienen hora) y cuántas veces fue detectado antes. También muestran los casos sin hora, la cobertura y la mediana de diferencia. Publicar antes **no** indica que un medio dirija, origine o copie a otro.
+**Métricas de secuencias:** son descriptivas. Cuentan, por par de medios, cuántas veces uno publicó antes que el otro (solo cuando ambas notas tienen hora) y cuántas veces fue detectado antes. Muestran casos sin hora, mediana firmada, empates e intervalo de Wilson para la proporción. Publicar antes **no** indica que un medio dirija, origine o copie a otro.
+
+**Agenda e interés:** la agenda compartida incluye Jaccard, coberturas direccionales y relación observado/esperado según el volumen monitoreado. Las aperturas se deduplican por persona, nota y día y se comparan con las exposiciones y posiciones registradas. Son asociaciones descriptivas, no pruebas de coordinación ni efectos causales del orden.
 
 ## Fechas
 

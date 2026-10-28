@@ -19,6 +19,8 @@ from radar.analysis import headline_changes
 from radar.analysis.relations import TYPE_LABELS
 from radar.config import get_settings
 from radar.metrics import agenda_metrics, sequence_metrics
+from radar.interactions import interest_metrics
+from radar.observations import coverage_metrics
 from radar.queries import title_condition
 from radar.models import (
     Alert,
@@ -290,5 +292,10 @@ def chronology(request: Request, dias: int = Query(3, ge=1, le=30), db: Session 
 def metrics(request: Request, db: Session = Depends(get_db), user: User = Depends(viewer)):
     demo = demo_visible(request)
     data = sequence_metrics(db, include_demo=demo)
+    now = utcnow()
     return render(request, "metrics.html", {"m": data, "agenda": agenda_metrics(db, demo),
+                                            "coverage": coverage_metrics(
+                                                db, now - timedelta(weeks=8), now),
+                                            "interest": interest_metrics(
+                                                db, now - timedelta(weeks=8)),
                                             "nav": "metricas"}, user=user)
